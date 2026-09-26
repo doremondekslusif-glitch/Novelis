@@ -16,7 +16,7 @@ const starter:Novel[]=[
 const emptyBuilder:BuilderData={premise:"",characters:"",world:"",outline:""};
 
 function normalizeNovel(n:Novel):Novel{
- const chapterList=n.chapterList?.length?n.chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}];
+ const chapterList:Chapter[]=n.chapterList?.length ? n.chapterList : [{id:"1",title:"Bab 1",content:"",status:"Draft" as const}];
  return {...n,builder:{...emptyBuilder,...n.builder},chapterList,chapters:chapterList.length};
 }
 
@@ -92,7 +92,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const initial=normalizeNovel(novel);const [chapters,setChapters]=useState<Chapter[]>(initial.chapterList!);const [activeId,setActiveId]=useState(initial.chapterList![0].id);const [title,setTitle]=useState("");const [text,setText]=useState("");const [dirty,setDirty]=useState(false);
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false)}},[activeId]);
- const save=()=>{const updatedChapters=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||"Bab tanpa judul",content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);setChapters(updatedChapters);onUpdate({...novel,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});setDirty(false)};
+ const save=()=>{const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||"Bab tanpa judul",content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);setChapters(updatedChapters);onUpdate({...novel,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});setDirty(false)};
  const selectChapter=(id:string)=>{if(dirty)save();setActiveId(id)};
  const addChapter=()=>{if(dirty)save();const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false)};
  const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);setDirty(true)};
