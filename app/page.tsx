@@ -8,9 +8,9 @@ type BuilderData={premise:string;characters:string;world:string;outline:string};
 type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;chapterList?:Chapter[]};
 
 const starter:Novel[]=[
- {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",characters:"",world:"",outline:""},chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}]},
- {title:"Senja di Kota Hujan",genre:"Romance • Drama",chapters:8,progress:42,updated:"Kemarin",builder:{premise:"",characters:"",world:"",outline:""},chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}]},
- {title:"Project Eclipse",genre:"Sci-Fi • Mystery",chapters:5,progress:25,updated:"3 hari lalu",builder:{premise:"",characters:"",world:"",outline:""},chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}]}
+ {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
+ {title:"Senja di Kota Hujan",genre:"Romance • Drama",chapters:8,progress:42,updated:"Kemarin",builder:{premise:"",characters:"",world:"",outline:""},chapterList:Array.from({length:8},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
+ {title:"Project Eclipse",genre:"Sci-Fi • Mystery",chapters:5,progress:25,updated:"3 hari lalu",builder:{premise:"",characters:"",world:"",outline:""},chapterList:Array.from({length:5},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))}
 ];
 
 const emptyBuilder:BuilderData={premise:"",characters:"",world:"",outline:""};
@@ -91,10 +91,10 @@ function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;on
 function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n:Novel)=>void}){
  const initial=normalizeNovel(novel);const [chapters,setChapters]=useState<Chapter[]>(initial.chapterList!);const [activeId,setActiveId]=useState(initial.chapterList![0].id);const [title,setTitle]=useState("");const [text,setText]=useState("");const [dirty,setDirty]=useState(false);
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
- useEffect(()=>{if(active){setTitle(active.title);setText(active.content)}},[activeId]);
+ useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false)}},[activeId]);
  const save=()=>{const updatedChapters=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||"Bab tanpa judul",content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);setChapters(updatedChapters);onUpdate({...novel,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});setDirty(false)};
  const selectChapter=(id:string)=>{if(dirty)save();setActiveId(id)};
- const addChapter=()=>{if(dirty)save();const id=Date.now().toString();const next=chapters.length+1;const ch={id,title:`Bab ${next}`,content:"",status:"Draft" as const};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false)};
+ const addChapter=()=>{if(dirty)save();const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false)};
  const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);setDirty(true)};
  return <div className="workspace"><button className="back" onClick={()=>{if(dirty)save();onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
   <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><button className="primary" onClick={save}><Save size={16}/> {dirty?"Simpan":"Tersimpan"}</button></div>
