@@ -1,5 +1,5 @@
 "use client";
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {BookOpen,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft, WandSparkles, Save, Play, X} from "lucide-react";
 
 type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string};
@@ -10,8 +10,10 @@ const starter:Novel[]=[
 ];
 
 export default function Home(){
- const [novels,setNovels]=useState(starter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[saved,setSaved]=useState(false);
+ const [novels,setNovels]=useState<Novel[]>(starter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[saved,setSaved]=useState(false),[hydrated,setHydrated]=useState(false);
  const [title,setTitle]=useState(""),[genre,setGenre]=useState("Fantasy"),[idea,setIdea]=useState("");
+ useEffect(()=>{try{const raw=localStorage.getItem("novelis:novels");const savedPage=localStorage.getItem("novelis:page");const selectedTitle=localStorage.getItem("novelis:selected");if(raw){const parsed=JSON.parse(raw);if(Array.isArray(parsed))setNovels(parsed)}if(savedPage)setPage(savedPage);if(selectedTitle){const rawNovels=raw?JSON.parse(raw):starter;const found=rawNovels.find((n:Novel)=>n.title===selectedTitle);if(found)setSelected(found)} }catch{}finally{setHydrated(true)}},[]);
+ useEffect(()=>{if(!hydrated)return;localStorage.setItem("novelis:novels",JSON.stringify(novels));localStorage.setItem("novelis:page",page);if(selected)localStorage.setItem("novelis:selected",selected.title);else localStorage.removeItem("novelis:selected")},[novels,page,selected,hydrated]);
  const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
  const openNovel=(n:Novel)=>{setSelected(n);setPage("editor")};
  const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const n={title:name,genre,chapters:0,progress:0,updated:"Baru dibuat",idea};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
