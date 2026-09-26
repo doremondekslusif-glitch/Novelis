@@ -25,21 +25,22 @@ export async function POST(request:Request){
    `Bab ke: ${chapter.number||1}`,
    `Judul bab: ${chapter.title||"Bab tanpa judul"}`,
    chapter.content?.trim()
-    ? "Teks yang sudah ditulis. Lanjutkan cerita secara langsung dari bagian terakhir tanpa mengulang bagian sebelumnya:\n"+chapter.content
+    ? "Teks yang sudah ditulis. Lanjutkan cerita secara langsung dari bagian terakhir tanpa mengulang bagian sebelumnya:\\n"+chapter.content
     : "Bab ini masih kosong. Kembangkan adegan pembuka dan alurnya berdasarkan fondasi cerita di atas."
   ].join("\n\n");
 
-  const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+  const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
    method:"POST",
    headers:{
     "Content-Type":"application/json",
     "x-goog-api-key":apiKey
    },
    body:JSON.stringify({
-    contents:[{parts:[{text:prompt}]}],
-    generationConfig:{
-     temperature:0.9,
-     maxOutputTokens:4000
+    model:"gemini-3.8-flash",
+    input:prompt,
+    store:false,
+    generation_config:{
+     thinking_level:"low"
     }
    })
   });
@@ -50,10 +51,9 @@ export async function POST(request:Request){
    return NextResponse.json({error:message},{status:response.status});
   }
 
-  const text=result?.candidates?.[0]?.content?.parts
-   ?.map((part:{text?:string})=>part.text||"")
-   .join("")
-   .trim();
+  const text=result?.output_text?.trim()||
+   result?.outputs?.filter((item:{type?:string})=>item.type==="text")
+    ?.map((item:{text?:string})=>item.text||"").join("").trim();
 
   if(!text)return NextResponse.json({error:"Gemini tidak mengembalikan teks."},{status:502});
   return NextResponse.json({text});
