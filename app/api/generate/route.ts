@@ -151,7 +151,7 @@ export async function POST(request:Request){
 
   if(action==="memoryFoundation"){
    try{
-    const parsed=JSON.parse(text.replace(/^\`\`\`json\\s*/,"").replace(/\\s*\`\`\`$/,"").trim());
+    const parsed=JSON.parse(text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim());
     return NextResponse.json({
      summary:typeof parsed.summary==="string"?parsed.summary:"",
      characters:Array.isArray(parsed.characters)?parsed.characters:[],
