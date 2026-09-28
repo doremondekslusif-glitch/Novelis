@@ -152,7 +152,15 @@ export async function POST(request:Request){
    return NextResponse.json({error:"Gemini tidak mengembalikan teks cerita."},{status:502});
   }
 
-  if(action==="qualityControl"){\n   try{\n    const cleaned=text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim();\n    const parsed=JSON.parse(cleaned);\n    const issues=Array.isArray(parsed.issues)?parsed.issues.slice(0,8).map((item:any)=>({severity:item?.severity==="high"||item?.severity==="medium"||item?.severity==="low"?item.severity:"low",category:typeof item?.category==="string"?item.category:"continuity",title:typeof item?.title==="string"?item.title:"Catatan kontinuitas",evidence:typeof item?.evidence==="string"?item.evidence:"",suggestion:typeof item?.suggestion==="string"?item.suggestion:"Tinjau bagian ini."})):[];\n    return NextResponse.json({overall:issues.some((item:any)=>item.severity==="high"||item.severity==="medium")?"review":"clear",issues});\n   }catch{return NextResponse.json({error:"Gemini mengembalikan format Quality Control yang tidak valid."},{status:502});}\n  }\n  if(action==="storyIntelligence"){
+  if(action==="qualityControl"){
+   try{
+    const cleaned=text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim();
+    const parsed=JSON.parse(cleaned);
+    const issues=Array.isArray(parsed.issues)?parsed.issues.slice(0,8).map((item:any)=>({severity:item?.severity==="high"||item?.severity==="medium"||item?.severity==="low"?item.severity:"low",category:typeof item?.category==="string"?item.category:"continuity",title:typeof item?.title==="string"?item.title:"Catatan kontinuitas",evidence:typeof item?.evidence==="string"?item.evidence:"",suggestion:typeof item?.suggestion==="string"?item.suggestion:"Tinjau bagian ini."})):[];
+    return NextResponse.json({overall:issues.some((item:any)=>item.severity==="high"||item.severity==="medium")?"review":"clear",issues});
+   }catch{return NextResponse.json({error:"Gemini mengembalikan format Quality Control yang tidak valid."},{status:502});}
+  }
+  if(action==="storyIntelligence"){
    try{
     const parsed=JSON.parse(text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim());
     return NextResponse.json({relationships:Array.isArray(parsed.relationships)?parsed.relationships:[],timeline:Array.isArray(parsed.timeline)?parsed.timeline:[],threads:Array.isArray(parsed.threads)?parsed.threads:[],arcs:Array.isArray(parsed.arcs)?parsed.arcs:[]});
