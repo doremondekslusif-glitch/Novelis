@@ -11,7 +11,7 @@ export async function GET(){
  return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:MODEL});
 }
 
-type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"memoryFoundation"|"finalize";
+type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"memoryFoundation";
 
 export async function POST(request:Request){
  try{
@@ -41,7 +41,7 @@ export async function POST(request:Request){
    description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    summarize:"Buat ringkasan bab yang padat tetapi informatif. Catat kejadian penting, perubahan hubungan, fakta baru, konflik, keputusan tokoh, lokasi, waktu, dan hal yang harus diingat untuk bab berikutnya. Jangan menambahkan kejadian yang tidak ada. Maksimal sekitar 180 kata.",
    memory:"Bangun Story Memory permanen untuk novel ini. Gabungkan fondasi cerita dengan kejadian yang sudah terjadi. Prioritaskan fakta yang harus konsisten di bab-bab berikutnya: premis, tujuan tokoh, hubungan, rahasia, aturan dunia, konflik, perkembangan penting, fakta waktu/tempat, dan benang cerita yang belum selesai. Hapus detail yang tidak penting. Jangan mengarang fakta baru. Maksimal sekitar 700 kata.",
-   memoryFoundation:"Analisis bab ini untuk Memory Foundation. Buat ringkasan bab maksimal 180 kata. Ekstrak dan perbarui daftar karakter yang benar-benar muncul atau berubah pada bab ini, serta entitas penting seperti lokasi, benda, organisasi, atau elemen dunia. Gabungkan dengan data Memory Foundation yang sudah ada dan pertahankan ID/nama yang sama jika entitasnya sama. Jangan menghapus karakter lama hanya karena lama tidak muncul. Bedakan karakter yang masih aktif dari yang dinyatakan meninggal, pergi, atau tidak diketahui. Tentukan memoryNeedsUpdate=true hanya jika bab ini membawa perubahan penting pada alur besar, rahasia, tujuan, konflik, hubungan utama, aturan dunia, atau status penting karakter. Balas HANYA JSON valid dengan format {\"summary\":\"...\",\"characters\":[{\"id\":\"...\",\"name\":\"...\",\"role\":\"...\",\"description\":\"...\",\"facts\":[\"...\"],\"status\":\"...\",\"firstChapter\":1,\"lastChapter\":1}],\"entities\":[{\"id\":\"...\",\"name\":\"...\",\"type\":\"location\",\"description\":\"...\",\"facts\":[\"...\"],\"firstChapter\":1,\"lastChapter\":1}],\"memoryNeedsUpdate\":false}. Jangan gunakan markdown."
+   memoryFoundation:"Analisis bab ini untuk Memory Foundation. Buat ringkasan bab maksimal 180 kata. Ekstrak karakter dan entitas penting yang muncul atau berubah. Gabungkan dengan data yang sudah ada. Jangan menghapus karakter atau entitas lama hanya karena lama tidak muncul. Pertahankan nama dan ID yang sama jika itu entitas yang sama. Bedakan status aktif, meninggal, pergi, atau tidak diketahui. Tentukan memoryNeedsUpdate=true hanya jika ada perubahan penting pada alur utama, rahasia, tujuan, konflik, hubungan utama, aturan dunia, atau status penting karakter. Balas HANYA JSON valid dengan format {\"summary\":\"...\",\"characters\":[{\"id\":\"char-nama-normalized\",\"name\":\"...\",\"role\":\"...\",\"description\":\"...\",\"facts\":[\"...\"],\"status\":\"aktif\",\"firstChapter\":1,\"lastChapter\":1}],\"entities\":[{\"id\":\"entity-nama-normalized\",\"name\":\"...\",\"type\":\"location\",\"description\":\"...\",\"facts\":[\"...\"],\"firstChapter\":1,\"lastChapter\":1}],\"memoryNeedsUpdate\":false}. Jangan gunakan markdown."
   };
 
   const currentText=clip(chapter.content,12000);
@@ -100,7 +100,7 @@ export async function POST(request:Request){
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({
        contents:[{role:"user",parts:[{text:prompt}]}],
-       generationConfig:{thinkingConfig:{thinkingLevel:"low"},responseMimeType:(action==="finalize"||action==="memoryFoundation")?"application/json":"text/plain"}
+       generationConfig:{thinkingConfig:{thinkingLevel:"low"},responseMimeType:action==="memoryFoundation"?"application/json":"text/plain"}
       }),
       signal:controller.signal
      });
@@ -147,6 +147,20 @@ export async function POST(request:Request){
 
   if(!text){
    return NextResponse.json({error:"Gemini tidak mengembalikan teks cerita."},{status:502});
+  }
+
+  if(action==="memoryFoundation"){
+   try{
+    const parsed=JSON.parse(text.replace(/^\`\`\`json\\s*/,"").replace(/\\s*\`\`\`$/,"").trim());
+    return NextResponse.json({
+     summary:typeof parsed.summary==="string"?parsed.summary:"",
+     characters:Array.isArray(parsed.characters)?parsed.characters:[],
+     entities:Array.isArray(parsed.entities)?parsed.entities:[],
+     memoryNeedsUpdate:Boolean(parsed.memoryNeedsUpdate)
+    });
+   }catch{
+    return NextResponse.json({error:"Gemini mengembalikan format Memory Foundation yang tidak valid."},{status:502});
+   }
   }
 
   return NextResponse.json({text});
