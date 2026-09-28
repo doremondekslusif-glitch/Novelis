@@ -4,6 +4,13 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=60;
 
+const MODEL="gemini-3.8-flash";
+
+export async function GET(){
+ const apiKey=process.env.GEMINI_API_KEY;
+ return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:MODEL});
+}
+
 type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory";
 
 export async function POST(request:Request){
@@ -69,17 +76,17 @@ export async function POST(request:Request){
    currentText ? "TEKS BAB SEKARANG:\n"+currentText : ""
   ].filter(Boolean).join("\n\n");
 
-  const model="gemini-3.8-flash";
   let response:Response|null=null;
   let result:any=null;
   let lastError="";
+  let geminiStatus=0;
 
-  for(let attempt=0;attempt<3;attempt++){
+  for(let attempt=0;attempt<2;attempt++){
    try{
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),45000);
+    const timeout=setTimeout(()=>controller.abort(),25000);
     try{
-     response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+     response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,{
       method:"POST",
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({
@@ -95,20 +102,30 @@ export async function POST(request:Request){
 
     if(response.ok)break;
 
+    geminiStatus=response.status;
     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
-    if(![429,500,502,503,504].includes(response.status))break;
-    if(attempt<2)await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+    if(response.status===429 && attempt<1){
+     await new Promise(resolve=>setTimeout(resolve,1200));
+     continue;
+    }
+    break;
    }catch(error){
     lastError=error instanceof Error&&error.name==="AbortError"?"Gemini terlalu lama merespons.":error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
-    if(attempt<2)await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+    break;
    }
   }
 
   if(!response?.ok){
-   return NextResponse.json({
-    error:"Gemini belum merespons. Coba Generate lagi beberapa saat.",
-    detail:lastError
-   },{status:503});
+   const timeoutError=lastError==="Gemini terlalu lama merespons.";
+   const status=timeoutError?504:geminiStatus===429?429:(geminiStatus>=500?503:502);
+   const error=timeoutError
+    ?"Gemini terlalu lama merespons. Coba lagi beberapa saat."
+    :geminiStatus===401||geminiStatus===403
+      ?"Gemini menolak API key. Periksa GEMINI_API_KEY di environment Vercel."
+      :geminiStatus===404
+        ?`Model ${MODEL} tidak ditemukan atau tidak tersedia untuk API key ini.`
+        :"Gemini gagal memproses permintaan.";
+   return NextResponse.json({error,detail:lastError,status:geminiStatus||null},{status});
   }
 
   const text=result?.candidates?.[0]?.content?.parts
