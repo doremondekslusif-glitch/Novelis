@@ -97,6 +97,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [notice,setNotice]=useState("");
  const [memory,setMemory]=useState(novel.memory||"");
  const [memoryBusy,setMemoryBusy]=useState(false);
+ const [finalizing,setFinalizing]=useState(false);
  const [summaryBusy,setSummaryBusy]=useState(false);
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
  const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
