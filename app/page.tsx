@@ -105,12 +105,59 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
+ const persistChapter=(updatedChapters:Chapter[],nextMemory=memory)=>{
+  onUpdate({...novel,memory:nextMemory,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});
+ };
+
  const save=(silent=false)=>{
   const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);
   setChapters(updatedChapters);
-  onUpdate({...novel,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});
+  persistChapter(updatedChapters);
   setDirty(false);
   if(!silent)setNotice("Tersimpan");
+ };
+
+ const finalizeChapter=async()=>{
+  if(finalizing||!text.trim()) { if(!text.trim()) save(); return; }
+  const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);
+  setChapters(updatedChapters);
+  setDirty(false);
+  setFinalizing(true);
+  setSummaryBusy(true);
+  setMemoryBusy(true);
+  setGenerateError("");
+  setNotice("Menyimpan bab & memperbarui Story Memory...");
+  try{
+   const summaryRes=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    action:"summarize",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},previousChapter:null
+   })});
+   const summaryData=await summaryRes.json();
+   if(!summaryRes.ok)throw new Error(summaryData.error||"Gagal membuat ringkasan bab.");
+   const summary=(summaryData.text||"").trim();
+   if(!summary)throw new Error("AI tidak menghasilkan ringkasan bab.");
+   const withSummary=updatedChapters.map(c=>c.id===activeId?{...c,summary}:c);
+   setChapters(withSummary);
+
+   const memoryRes=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    action:"memory",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapters:withSummary.map(c=>({title:c.title,content:c.content,summary:c.summary}))
+   })});
+   const memoryData=await memoryRes.json();
+   if(!memoryRes.ok)throw new Error(memoryData.error||"Ringkasan tersimpan, tetapi Story Memory gagal diperbarui.");
+   const nextMemory=(memoryData.text||"").trim();
+   if(!nextMemory)throw new Error("Ringkasan tersimpan, tetapi AI tidak menghasilkan Story Memory.");
+   setMemory(nextMemory);
+   persistChapter(withSummary,nextMemory);
+   setNotice(`Bab ${chapterNumber} tersimpan • Memory diperbarui`);
+  }catch(error){
+   persistChapter(updatedChapters,memory);
+   setGenerateError(error instanceof Error?error.message:"Gagal memperbarui Story Memory.");
+   setNotice("Bab tersimpan");
+  }finally{
+   setSummaryBusy(false);
+   setMemoryBusy(false);
+   setFinalizing(false);
+  }
  };
 
  useEffect(()=>{
@@ -119,8 +166,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   return()=>clearTimeout(timer);
  },[text,title,dirty]);
 
- const selectChapter=(id:string)=>{if(dirty)save(true);setActiveId(id)};
- const addChapter=()=>{if(dirty)save(true);const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false);setNotice("")};
+ const selectChapter=async(id:string)=>{if(finalizing||id===activeId)return;if(dirty)await finalizeChapter();setActiveId(id)};
+ const addChapter=async()=>{if(finalizing)return;if(dirty)await finalizeChapter();const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false);setNotice("")};
  const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);setDirty(true)};
 
  const runAI=async(action:"generate"|"continue"|"improve"|"dialog"|"description")=>{
@@ -178,8 +225,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const primaryAction=chapterNumber===1?"generate":"continue";
  const primaryLabel=chapterNumber===1?"Generate":"Lanjutkan";
  return <div className="workspace">
-  <button className="back" onClick={()=>{if(dirty)save(true);onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
-  <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><div className="editorSave"><span className={dirty?"unsaved":"saved"}>{dirty?"● Belum disimpan":notice||"✓ Tersimpan"}</span><button className="primary" onClick={()=>save()}><Save size={16}/> Simpan</button></div></div>
+  <button className="back" onClick={async()=>{if(finalizing)return;if(dirty)await finalizeChapter();onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
+  <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><div className="editorSave"><span className={dirty?"unsaved":"saved"}>{dirty?"● Belum disimpan":notice||"✓ Tersimpan"}</span><button className="primary" onClick={finalizeChapter} disabled={finalizing}>{finalizing?<><Loader2 size={16} className="spin"/> Menyimpan...</>:<><Save size={16}/> Simpan</>}</button></div></div>
   <div className="editorGrid">
    <div className="chapterList"><div className="chapterHead"><b>DAFTAR BAB</b><button className="iconBtn" onClick={addChapter} title="Tambah bab"><Plus size={16}/></button></div>{chapters.map((c,i)=><div className={c.id===activeId?"chapter active":"chapter"} key={c.id}><button onClick={()=>selectChapter(c.id)}><span>{c.title}</span><small>{c.status}</small></button></div>)}<button className="chapter add" onClick={addChapter}>+ Tambah bab</button>{chapters.length>1&&<button className="deleteChapter" onClick={removeChapter}><Trash2 size={14}/> Hapus bab aktif</button>}</div>
    <div className="editorPanel">
@@ -187,11 +234,11 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     <textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true);setNotice("")}} placeholder="Mulai menulis cerita..."/>
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
     <div className="memoryPanel">
-     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY</span><small>Memori ini dipakai AI agar tetap ingat fondasi dan kejadian penting novel.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> Bangun Memory</>}</button></div>
-     <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Bangun Memory” untuk membuatnya otomatis, atau tulis sendiri."/>
-     <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"}</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
+     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY</span><small>Otomatis diperbarui saat kamu menyimpan bab, jadi AI tetap mengikuti perkembangan cerita.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy||finalizing}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> Bangun Memory</>}</button></div>
+     <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} disabled={finalizing} placeholder="Belum ada Story Memory. Klik “Bangun Memory” untuk membuatnya otomatis, atau tulis sendiri."/>
+     <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"}</span><button className="textBtn" onClick={saveMemory} disabled={finalizing}>Simpan Memory</button></div>
     </div>
-    <div className="summaryBar"><div><b>Ringkasan bab</b><span>{active?.summary?.trim()?"AI sudah punya ringkasan bab ini.":"Belum ada ringkasan untuk bab ini."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas Bab</>}</button></div>
+    <div className="summaryBar"><div><b>Ringkasan bab</b><span>{active?.summary?.trim()?"AI sudah punya ringkasan bab ini.":"Belum ada ringkasan untuk bab ini."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()||finalizing}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas Bab</>}</button></div>
     <div className="aiToolbar">
      <button onClick={()=>runAI("improve")} disabled={generating||!text.trim()}><WandSparkles size={15}/> Perbaiki</button>
      <button onClick={()=>runAI("dialog")} disabled={generating||!text.trim()}><MessageCircle size={15}/> Dialog</button>
