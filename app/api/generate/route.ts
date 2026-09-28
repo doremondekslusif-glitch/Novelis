@@ -11,7 +11,7 @@ export async function GET(){
  return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:MODEL});
 }
 
-type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory";
+type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"finalize";
 
 export async function POST(request:Request){
  try{
@@ -38,7 +38,8 @@ export async function POST(request:Request){
    dialog:"Perkaya bagian yang diberikan dengan dialog yang natural dan sesuai karakter. Pertahankan kejadian utama dan jangan mengubah inti cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    summarize:"Buat ringkasan bab yang padat tetapi informatif. Catat kejadian penting, perubahan hubungan, fakta baru, konflik, keputusan tokoh, lokasi, waktu, dan hal yang harus diingat untuk bab berikutnya. Jangan menambahkan kejadian yang tidak ada. Maksimal sekitar 180 kata.",
-   memory:"Bangun Story Memory permanen untuk novel ini. Gabungkan fondasi cerita dengan kejadian yang sudah terjadi. Prioritaskan fakta yang harus konsisten di bab-bab berikutnya: premis, tujuan tokoh, hubungan, rahasia, aturan dunia, konflik, perkembangan penting, fakta waktu/tempat, dan benang cerita yang belum selesai. Hapus detail yang tidak penting. Jangan mengarang fakta baru. Maksimal sekitar 700 kata."
+   memory:"Bangun Story Memory permanen untuk novel ini. Gabungkan fondasi cerita dengan kejadian yang sudah terjadi. Prioritaskan fakta yang harus konsisten di bab-bab berikutnya: premis, tujuan tokoh, hubungan, rahasia, aturan dunia, konflik, perkembangan penting, fakta waktu/tempat, dan benang cerita yang belum selesai. Hapus detail yang tidak penting. Jangan mengarang fakta baru. Maksimal sekitar 700 kata.",
+   finalize:"Finalisasi bab dalam SATU respons. Buat ringkasan bab maksimal 180 kata dan Story Memory maksimal 700 kata. Jangan mengarang fakta baru. Balas HANYA JSON valid dengan format {\"summary\":\"...\",\"memory\":\"...\"}. Jangan gunakan markdown."
   };
 
   const currentText=clip(chapter.content,12000);
@@ -68,7 +69,7 @@ export async function POST(request:Request){
    "Outline keseluruhan: "+(builder.outline||"-"),
    storyMemory ? "STORY MEMORY YANG HARUS DIJAGA:\n"+storyMemory : "",
    summaries ? "RINGKASAN BAB TERDAHULU:\n"+summaries : "",
-   action==="memory" && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
+   (action==="memory"||action==="finalize") && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
    "",
    "BAB: "+(chapter.number||1),
    "JUDUL BAB: "+(chapter.title||"Bab tanpa judul"),
@@ -91,7 +92,7 @@ export async function POST(request:Request){
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({
        contents:[{role:"user",parts:[{text:prompt}]}],
-       generationConfig:{thinkingConfig:{thinkingLevel:"low"}}
+       generationConfig:{thinkingConfig:{thinkingLevel:"low"},responseMimeType:action==="finalize"?"application/json":"text/plain"}
       }),
       signal:controller.signal
      });
