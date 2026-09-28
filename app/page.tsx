@@ -132,24 +132,20 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setGenerateError("");
   setNotice("Menyimpan bab & memperbarui Story Memory...");
   try{
-   const summaryRes=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action:"summarize",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},previousChapter:null
+   const finalizeRes=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    action:"finalize",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},
+    chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapters:updatedChapters.map(c=>({title:c.title,content:c.content,summary:c.summary}))
    })});
-   const summaryData=await summaryRes.json();
-   if(!summaryRes.ok)throw new Error(summaryData.error||"Gagal membuat ringkasan bab.");
-   const summary=(summaryData.text||"").trim();
-   if(!summary)throw new Error("AI tidak menghasilkan ringkasan bab.");
+   const finalizeData=await finalizeRes.json();
+   if(!finalizeRes.ok)throw new Error(finalizeData.error||finalizeData.detail||"Gagal memperbarui Story Memory.");
+   let resultData:{summary:string;memory:string};
+   try{resultData=typeof finalizeData.text==="string"?JSON.parse(finalizeData.text):finalizeData.text}catch{throw new Error("Respons finalisasi Gemini tidak valid.");}
+   const summary=String(resultData?.summary||"").trim();
+   const nextMemory=String(resultData?.memory||"").trim();
+   if(!summary||!nextMemory)throw new Error("Gemini tidak menghasilkan ringkasan dan Story Memory lengkap.");
    const withSummary=updatedChapters.map(c=>c.id===activeId?{...c,summary}:c);
    setChapters(withSummary);
-
-   const memoryRes=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action:"memory",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
-    chapters:withSummary.map(c=>({title:c.title,content:c.content,summary:c.summary}))
-   })});
-   const memoryData=await memoryRes.json();
-   if(!memoryRes.ok)throw new Error(memoryData.error||"Ringkasan tersimpan, tetapi Story Memory gagal diperbarui.");
-   const nextMemory=(memoryData.text||"").trim();
-   if(!nextMemory)throw new Error("Ringkasan tersimpan, tetapi AI tidak menghasilkan Story Memory.");
    setMemory(nextMemory);
    persistChapter(withSummary,nextMemory);
    setNotice(`Bab ${chapterNumber} tersimpan • Memory diperbarui`);
