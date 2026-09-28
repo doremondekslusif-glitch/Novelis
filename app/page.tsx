@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect,useMemo,useState} from "react";
-import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2} from "lucide-react";
+import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2,Maximize2,Minimize2} from "lucide-react";
 
 type Chapter={id:string;title:string;content:string;status:"Draft"|"Selesai";summary?:string};
 type CharacterMemory={id:string;name:string;role?:string;description?:string;facts?:string[];status?:string;firstChapter?:number;lastChapter?:number};
@@ -112,6 +112,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [intelligenceBusy,setIntelligenceBusy]=useState(false);
  const [qualityBusy,setQualityBusy]=useState(false);
  const [qualityReport,setQualityReport]=useState<QualityReport|null>(null);
+ const [focusMode,setFocusMode]=useState(false);
+ const [wordGoal,setWordGoal]=useState(1000);
  const [relationships,setRelationships]=useState<RelationshipMemory[]>(novel.relationshipsMemory||[]);
  const [timeline,setTimeline]=useState<TimelineEvent[]>(novel.timeline||[]);
  const [storyThreads,setStoryThreads]=useState<StoryThread[]>(novel.storyThreads||[]);
@@ -127,6 +129,11 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja",...extra});
  };
 
+ const wordCount=text.trim()?text.trim().split(/\s+/).length:0;
+ const characterCount=text.length;
+ const readingMinutes=wordCount?Math.max(1,Math.ceil(wordCount/200)):0;
+ const wordGoalProgress=wordGoal>0?Math.min(100,Math.round(wordCount/wordGoal*100)):0;
+
  const save=(silent=false)=>{
   const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);
   setChapters(updatedChapters);
@@ -134,6 +141,15 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setDirty(false);
   if(!silent)setNotice("Tersimpan");
  };
+
+ useEffect(()=>{
+  const onKeyDown=(event:KeyboardEvent)=>{
+   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="s"){event.preventDefault();save();}
+   if(event.key==="Escape"&&focusMode){setFocusMode(false);}
+  };
+  window.addEventListener("keydown",onKeyDown);
+  return()=>window.removeEventListener("keydown",onKeyDown);
+ },[focusMode,save]);
 
  const finalizeChapter=()=>{ save(); };
 
@@ -253,14 +269,32 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
 
  const primaryAction=chapterNumber===1?"generate":"continue";
  const primaryLabel=chapterNumber===1?"Generate":"Lanjutkan";
- return <div className="workspace">
+ return <div className={focusMode?"workspace writerFocus":"workspace"}>
   <button className="back" onClick={()=>{if(dirty)save(true);onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
   <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><div className="editorSave"><span className={dirty?"unsaved":"saved"}>{dirty?"● Belum disimpan":notice||"✓ Tersimpan"}</span><button className="primary" onClick={finalizeChapter} disabled={false}><Save size={16}/> Simpan</button></div></div>
   <div className="editorGrid">
    <div className="chapterList"><div className="chapterHead"><b>DAFTAR BAB</b><button className="iconBtn" onClick={addChapter} title="Tambah bab"><Plus size={16}/></button></div>{chapters.map((c,i)=><div className={c.id===activeId?"chapter active":"chapter"} key={c.id}><button onClick={()=>selectChapter(c.id)}><span>{c.title}</span><small>{c.status}</small></button></div>)}<button className="chapter add" onClick={addChapter}>+ Tambah bab</button>{chapters.length>1&&<button className="deleteChapter" onClick={removeChapter}><Trash2 size={14}/> Hapus bab aktif</button>}</div>
    <div className="editorPanel">
-    <div className="editorTop"><input className="chapterTitle" value={title} onChange={e=>{setTitle(e.target.value);setDirty(true);setNotice("")}} placeholder="Judul bab"/><span>Bab {chapterNumber}</span></div>
-    <textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true);setNotice("")}} placeholder="Mulai menulis cerita..."/>
+    <div className="editorTop">
+     <input className="chapterTitle" value={title} onChange={e=>{setTitle(e.target.value);setDirty(true);setNotice("")}} placeholder="Judul bab"/>
+     <div className="writerTools">
+      <span className="writerStat"><b>{wordCount.toLocaleString("id-ID")}</b> kata</span>
+      <span className="writerStat">{characterCount.toLocaleString("id-ID")} karakter</span>
+      <span className="writerStat">≈ {readingMinutes||"—"} mnt</span>
+      <button className="focusBtn" onClick={()=>setFocusMode(v=>!v)} title={focusMode?"Keluar dari Focus Mode":"Masuk Focus Mode"}>
+       {focusMode?<><Minimize2 size={14}/> Keluar Focus</>:<><Maximize2 size={14}/> Focus</>}
+      </button>
+      <span className="chapterNumber">Bab {chapterNumber}</span>
+     </div>
+    </div>
+    <div className="writingArea">
+     <textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true);setNotice("")}} placeholder="Mulai menulis cerita..."/>
+     <div className="writingFooter">
+      <div className="writingMeta"><span>{wordCount.toLocaleString("id-ID")} / {wordGoal>0?wordGoal.toLocaleString("id-ID"):"—"} kata</span><span>Ctrl/Cmd + S untuk menyimpan • Esc untuk keluar Focus</span></div>
+      <div className="goalControl"><label>Target</label><input type="number" min="0" step="100" value={wordGoal} onChange={e=>setWordGoal(Math.max(0,Number(e.target.value)||0))}/><span>{wordGoal>0?wordGoalProgress+"%":"—"}</span></div>
+     </div>
+     <div className="goalTrack"><span style={{width:wordGoalProgress+"%"}}/></div>
+    </div>
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
     <div className="memoryPanel">
      <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY</span><small>Memory alur besar tetap kamu kontrol. Ringkas Bab akan memperbarui Memory Foundation dan memberi tanda jika Story Memory perlu diperbarui.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> Update Story Memory</>}</button></div>
