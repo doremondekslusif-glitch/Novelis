@@ -193,7 +193,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
     <div className="memoryPanel">
      <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY</span><small>Diperbarui saat kamu menekan “Bangun Memory”, sehingga kamu bisa mengontrol kapan konteks cerita diubah.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> Bangun Memory</>}</button></div>
-     <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} disabled={finalizing} placeholder="Belum ada Story Memory. Klik “Bangun Memory” untuk membuatnya, atau tulis sendiri."/>
+     <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Bangun Memory” untuk membuatnya, atau tulis sendiri."/>
      <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"}</span><button className="textBtn" onClick={saveMemory} disabled={false}>Simpan Memory</button></div>
     </div>
     <div className="summaryBar"><div><b>Ringkasan bab</b><span>{active?.summary?.trim()?"AI sudah punya ringkasan bab ini.":"Belum ada ringkasan untuk bab ini."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas Bab</>}</button></div>
