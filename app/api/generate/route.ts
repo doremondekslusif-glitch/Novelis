@@ -1,5 +1,9 @@
 import {NextResponse} from "next/server";
 
+export const runtime="nodejs";
+export const dynamic="force-dynamic";
+export const maxDuration=60;
+
 type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory";
 
 export async function POST(request:Request){
@@ -106,4 +110,40 @@ export async function POST(request:Request){
  }catch(error){
   return NextResponse.json({error:error instanceof Error?error.message:"Terjadi kesalahan saat generate."},{status:500});
  }
-}
+}   const model="gemini-3.8-flash";
+   let response:Response|null=null;
+   let result:any=null;
+   let lastError="";
+
+   for(let attempt=0;attempt<3;attempt++){
+    try{
+     const controller=new AbortController();
+     const timeout=setTimeout(()=>controller.abort(),45000);
+     response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({
+       contents:[{role:"user",parts:[{text:prompt}]}],
+       generationConfig:{thinkingConfig:{thinkingLevel:"low"}}
+      }),
+      signal:controller.signal
+     });
+     clearTimeout(timeout);
+     result=await response.json();
+     if(response.ok)break;
+     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
+     if(![429,500,502,503,504].includes(response.status))break;
+     await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+    }catch(error){
+     lastError=error instanceof Error && error.name==="AbortError"?"Gemini terlalu lama merespons.":error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
+     if(attempt<2)await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+    }
+   }
+
+   if(!response?.ok){
+    return NextResponse.json({
+     error:"Gemini belum merespons. Coba Generate lagi beberapa saat.",
+     detail:lastError
+    },{status:503});
+   }
+
