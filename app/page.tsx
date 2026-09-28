@@ -156,7 +156,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis memori cerita.");
-   const updatedChapters=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:text.trim().length>80?"Selesai":"Draft",summary:String(data.summary||"").trim()}:c);
+   const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:(text.trim().length>80?"Selesai":"Draft") as Chapter["status"],summary:String(data.summary||"").trim()}:c);
    const incomingCharacters=Array.isArray(data.characters)?data.characters as CharacterMemory[]:[];
    const incomingEntities=Array.isArray(data.entities)?data.entities as EntityMemory[]:[];
    const mergeByName=<T extends {id:string;name:string}>(existing:T[],incoming:T[])=>{
