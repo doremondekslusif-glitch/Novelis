@@ -1,11 +1,11 @@
 "use client";
 
 import {useEffect,useMemo,useState} from "react";
-import {BookOpen,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2} from "lucide-react";
+import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2} from "lucide-react";
 
-type Chapter={id:string;title:string;content:string;status:"Draft"|"Selesai"};
+type Chapter={id:string;title:string;content:string;status:"Draft"|"Selesai";summary?:string};
 type BuilderData={premise:string;characters:string;world:string;outline:string};
-type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;chapterList?:Chapter[]};
+type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;chapterList?:Chapter[]};
 
 const starter:Novel[]=[
  {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
@@ -95,9 +95,13 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [title,setTitle]=useState("");const [text,setText]=useState("");
  const [dirty,setDirty]=useState(false);const [generating,setGenerating]=useState(false);const [generateError,setGenerateError]=useState("");
  const [notice,setNotice]=useState("");
+ const [memory,setMemory]=useState(novel.memory||"");
+ const [memoryBusy,setMemoryBusy]=useState(false);
+ const [summaryBusy,setSummaryBusy]=useState(false);
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
  const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
  const previousChapter=chapterNumber>1?chapters[chapterNumber-2]:null;
+ const chapterSummaries=chapters.filter(c=>c.summary?.trim()).map((c,i)=>`Bab ${i+1} — ${c.title}: ${c.summary}`).join("\n");
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
@@ -124,7 +128,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setGenerating(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action,novel:{title:novel.title,genre:novel.genre,builder:novel.builder},
+    action,novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,chapterSummaries},
     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null
    })});
@@ -134,6 +138,41 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    else setText(generated);
    setDirty(true);setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":action==="description"?"Deskripsi diperkaya":"Cerita berhasil dibuat");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal memproses tulisan.")}finally{setGenerating(false)}
+ };
+
+ const runSummary=async()=>{
+  if(summaryBusy||!text.trim())return;
+  setSummaryBusy(true);setGenerateError("");setNotice("");
+  try{
+   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    action:"summarize",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},previousChapter:null
+   })});
+   const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal membuat ringkasan.");
+   const updatedChapters=chapters.map(c=>c.id===activeId?{...c,summary:(data.text||"").trim()}:c);
+   setChapters(updatedChapters);
+   onUpdate({...novel,memory,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
+   setNotice("Ringkasan bab diperbarui");
+  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membuat ringkasan.")}finally{setSummaryBusy(false)}
+ };
+
+ const runMemory=async()=>{
+  if(memoryBusy)return;
+  setMemoryBusy(true);setGenerateError("");setNotice("");
+  try{
+   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    action:"memory",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title,content:text,number:chapterNumber},chapters:chapters.map(c=>({title:c.title,content:c.content,summary:c.summary}))
+   })});
+   const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal membangun Story Memory.");
+   const nextMemory=(data.text||"").trim();if(!nextMemory)throw new Error("AI tidak menghasilkan Story Memory.");
+   setMemory(nextMemory);
+   onUpdate({...novel,memory:nextMemory,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+   setNotice("Story Memory diperbarui");
+  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membangun Story Memory.")}finally{setMemoryBusy(false)}
+ };
+
+ const saveMemory=()=>{
+  onUpdate({...novel,memory,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+  setNotice("Story Memory tersimpan");
  };
 
  const primaryAction=chapterNumber===1?"generate":"continue";
@@ -147,6 +186,12 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     <div className="editorTop"><input className="chapterTitle" value={title} onChange={e=>{setTitle(e.target.value);setDirty(true);setNotice("")}} placeholder="Judul bab"/><span>Bab {chapterNumber}</span></div>
     <textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true);setNotice("")}} placeholder="Mulai menulis cerita..."/>
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
+    <div className="memoryPanel">
+     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY</span><small>Memori ini dipakai AI agar tetap ingat fondasi dan kejadian penting novel.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> Bangun Memory</>}</button></div>
+     <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Bangun Memory” untuk membuatnya otomatis, atau tulis sendiri."/>
+     <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"}</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
+    </div>
+    <div className="summaryBar"><div><b>Ringkasan bab</b><span>{active?.summary?.trim()?"AI sudah punya ringkasan bab ini.":"Belum ada ringkasan untuk bab ini."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas Bab</>}</button></div>
     <div className="aiToolbar">
      <button onClick={()=>runAI("improve")} disabled={generating||!text.trim()}><WandSparkles size={15}/> Perbaiki</button>
      <button onClick={()=>runAI("dialog")} disabled={generating||!text.trim()}><MessageCircle size={15}/> Dialog</button>
