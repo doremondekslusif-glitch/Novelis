@@ -76,7 +76,7 @@ export async function POST(request:Request){
    "Outline keseluruhan: "+(builder.outline||"-"),
    storyMemory ? "STORY MEMORY YANG HARUS DIJAGA:\n"+storyMemory : "",
    summaries ? "RINGKASAN BAB TERDAHULU:\n"+summaries : "",
-   (action==="memory"||action==="finalize") && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
+   action==="memory" && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
    action==="memoryFoundation" && foundationData ? foundationData : "",
    "",
    "BAB: "+(chapter.number||1),
