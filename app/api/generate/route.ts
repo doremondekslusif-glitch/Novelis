@@ -125,7 +125,9 @@ export async function POST(request:Request){
       ?"Gemini menolak API key. Periksa GEMINI_API_KEY di environment Vercel."
       :geminiStatus===404
         ?`Model ${MODEL} tidak ditemukan atau tidak tersedia untuk API key ini.`
-        :"Gemini gagal memproses permintaan.";
+        :geminiStatus===429
+          ?"Batas penggunaan Gemini tercapai. Tunggu sebentar lalu coba lagi. Jika terus muncul, cek kuota/RPM/TPM project Gemini yang dipakai API key ini."
+          :"Gemini gagal memproses permintaan.";
    return NextResponse.json({error,detail:lastError,status:geminiStatus||null},{status});
   }
 
