@@ -109,7 +109,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [memoryNeedsUpdate,setMemoryNeedsUpdate]=useState(Boolean(novel.memoryNeedsUpdate));
  const [memoryBusy,setMemoryBusy]=useState(false);
  const [summaryBusy,setSummaryBusy]=useState(false);
- const [intelligenceBusy,setIntelligenceBusy]=useState(false);\n const [qualityBusy,setQualityBusy]=useState(false);\n const [qualityReport,setQualityReport]=useState<QualityReport|null>(null);
+ const [intelligenceBusy,setIntelligenceBusy]=useState(false);
+ const [qualityBusy,setQualityBusy]=useState(false);
+ const [qualityReport,setQualityReport]=useState<QualityReport|null>(null);
  const [relationships,setRelationships]=useState<RelationshipMemory[]>(novel.relationshipsMemory||[]);
  const [timeline,setTimeline]=useState<TimelineEvent[]>(novel.timeline||[]);
  const [storyThreads,setStoryThreads]=useState<StoryThread[]>(novel.storyThreads||[]);
