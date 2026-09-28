@@ -3,7 +3,12 @@ import {NextResponse} from "next/server";
 export async function POST(request:Request){
  try{
   const apiKey=process.env.GEMINI_API_KEY;
-  if(!apiKey)return NextResponse.json({error:"GEMINI_API_KEY belum dipasang di environment Vercel."},{status:500});
+  if(!apiKey){
+   return NextResponse.json(
+    {error:"GEMINI_API_KEY belum dipasang di environment Vercel."},
+    {status:500}
+   );
+  }
 
   const body=await request.json();
   const novel=body?.novel||{};
@@ -15,7 +20,8 @@ export async function POST(request:Request){
    "Tulis isi bab novel dalam bahasa Indonesia yang natural, imersif, konsisten, dan enak dibaca.",
    "Jangan memberi catatan, penjelasan, judul tambahan, atau markdown. Hanya isi cerita.",
    "Pertahankan karakter, dunia, konflik, dan gaya cerita yang sudah ditentukan.",
-   "Gunakan fondasi cerita berikut:",
+   "",
+   "FONDASI CERITA",
    `Judul novel: ${novel.title||"Tanpa judul"}`,
    `Genre: ${novel.genre||"Umum"}`,
    `Premis: ${builder.premise||"-"}`,
@@ -24,40 +30,63 @@ export async function POST(request:Request){
    `Outline: ${builder.outline||"-"}`,
    `Bab ke: ${chapter.number||1}`,
    `Judul bab: ${chapter.title||"Bab tanpa judul"}`,
+   "",
    chapter.content?.trim()
-    ? "Teks yang sudah ditulis. Lanjutkan cerita secara langsung dari bagian terakhir tanpa mengulang bagian sebelumnya:\\n"+chapter.content
+    ? "Teks yang sudah ditulis. Lanjutkan cerita secara langsung dari bagian terakhir tanpa mengulang bagian sebelumnya:\n"+chapter.content
     : "Bab ini masih kosong. Kembangkan adegan pembuka dan alurnya berdasarkan fondasi cerita di atas."
-  ].join("\n\n");
+  ].join("\n");
 
-  const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
-   method:"POST",
-   headers:{
-    "Content-Type":"application/json",
-    "x-goog-api-key":apiKey
-   },
-   body:JSON.stringify({
-    model:"gemini-3.8-flash",
-    input:prompt,
-    store:false,
-    generation_config:{
-     thinking_level:"low"
-    }
-   })
-  });
+  const response=await fetch(
+   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+   {
+    method:"POST",
+    headers:{
+     "Content-Type":"application/json",
+     "x-goog-api-key":apiKey
+    },
+    body:JSON.stringify({
+     contents:[
+      {
+       role:"user",
+       parts:[{text:prompt}]
+      }
+     ],
+     generationConfig:{
+      thinkingConfig:{
+       thinkingLevel:"low"
+      }
+     }
+    })
+   }
+  );
 
   const result=await response.json();
+
   if(!response.ok){
-   const message=result?.error?.message||"Gemini gagal menghasilkan cerita.";
+   const message=
+    result?.error?.message||
+    `Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
    return NextResponse.json({error:message},{status:response.status});
   }
 
-  const text=result?.output_text?.trim()||
-   result?.outputs?.filter((item:{type?:string})=>item.type==="text")
-    ?.map((item:{text?:string})=>item.text||"").join("").trim();
+  const text=result?.candidates?.[0]?.content?.parts
+   ?.filter((part:{text?:string})=>typeof part.text==="string")
+   ?.map((part:{text?:string})=>part.text||"")
+   ?.join("")
+   ?.trim();
 
-  if(!text)return NextResponse.json({error:"Gemini tidak mengembalikan teks."},{status:502});
+  if(!text){
+   return NextResponse.json(
+    {error:"Gemini tidak mengembalikan teks cerita."},
+    {status:502}
+   );
+  }
+
   return NextResponse.json({text});
  }catch(error){
-  return NextResponse.json({error:error instanceof Error?error.message:"Terjadi kesalahan saat generate."},{status:500});
+  return NextResponse.json(
+   {error:error instanceof Error?error.message:"Terjadi kesalahan saat generate."},
+   {status:500}
+  );
  }
 }
