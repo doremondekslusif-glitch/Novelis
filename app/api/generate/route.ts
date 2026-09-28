@@ -9,7 +9,9 @@ type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"
 export async function POST(request:Request){
  try{
   const apiKey=process.env.GEMINI_API_KEY;
-  if(!apiKey)return NextResponse.json({error:"GEMINI_API_KEY belum dipasang di environment Vercel."},{status:500});
+  if(!apiKey){
+   return NextResponse.json({error:"GEMINI_API_KEY belum dipasang di environment Vercel."},{status:500});
+  }
 
   const body=await request.json();
   const action:Action=body?.action||"generate";
@@ -20,9 +22,7 @@ export async function POST(request:Request){
   const memory=String(novel.memory||"");
   const chapterSummaries=String(novel.chapterSummaries||"");
   const chapters=Array.isArray(body?.chapters)?body.chapters:[];
-  const clip=(value:unknown,max:number)=>String(value||"").trim().slice(0,max);
-  const summaries=clip(chapterSummaries,7000);
-  const storyMemory=clip(memory,7000);
+  const clip=(value:unknown,max:number)=>String(value??"").trim().slice(0,max);
 
   const instructions:Record<Action,string>={
    generate:"Mulai Bab 1 dari awal. Tulis bab yang panjang, natural, imersif, dan kaya adegan. Targetkan sekitar 1200-1800 kata.",
@@ -36,6 +36,9 @@ export async function POST(request:Request){
 
   const currentText=clip(chapter.content,12000);
   const previousText=clip(previousChapter?.content,6000);
+  const summaries=clip(chapterSummaries,7000);
+  const storyMemory=clip(memory,7000);
+
   const chapterData=chapters.map((item:{title?:string;content?:string;summary?:string},index:number)=>{
    const summary=clip(item.summary,1200);
    const content=clip(item.content,2500);
@@ -47,7 +50,7 @@ export async function POST(request:Request){
    "Gunakan bahasa Indonesia yang natural, imersif, matang, dan enak dibaca.",
    "Jangan memberi catatan, penjelasan, judul tambahan, atau markdown kecuali diminta secara khusus oleh instruksi.",
    "Pertahankan kesinambungan karakter, dunia, konflik, hubungan tokoh, waktu, sebab-akibat, dan outline.",
-   instructions[action],
+   instructions[action]||instructions.generate,
    "",
    "FONDASI CERITA",
    "Judul novel: "+(novel.title||"Tanpa judul"),
@@ -66,59 +69,16 @@ export async function POST(request:Request){
    currentText ? "TEKS BAB SEKARANG:\n"+currentText : ""
   ].filter(Boolean).join("\n\n");
 
-  const models=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash-lite"];
+  const model="gemini-3.8-flash";
   let response:Response|null=null;
   let result:any=null;
   let lastError="";
 
-  for(const model of models){
-   for(let attempt=0;attempt<2;attempt++){
+  for(let attempt=0;attempt<3;attempt++){
+   try{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),45000);
     try{
-     response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-      body:JSON.stringify({
-       contents:[{role:"user",parts:[{text:prompt}]}],
-       generationConfig:{thinkingConfig:{thinkingLevel:"low"}}
-      })
-     });
-     result=await response.json();
-     if(response.ok)break;
-     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
-     const retryable=[429,500,502,503,504].includes(response.status);
-     if(!retryable)break;
-     await new Promise(resolve=>setTimeout(resolve,800*(attempt+1)));
-    }catch(error){
-     lastError=error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
-     await new Promise(resolve=>setTimeout(resolve,800*(attempt+1)));
-    }
-   }
-   if(response?.ok)break;
-  }
-
-  if(!response?.ok){
-   return NextResponse.json({
-    error:"Layanan AI sedang padat. Novelis sudah mencoba beberapa model Gemini, tetapi semuanya belum tersedia. Coba lagi beberapa saat.",
-    detail:lastError
-   },{status:503});
-  }
-  const text=result?.candidates?.[0]?.content?.parts
-   ?.filter((part:{text?:string})=>typeof part.text==="string")
-   ?.map((part:{text?:string})=>part.text||"").join("").trim();
-  if(!text)return NextResponse.json({error:"Gemini tidak mengembalikan teks cerita."},{status:502});
-  return NextResponse.json({text});
- }catch(error){
-  return NextResponse.json({error:error instanceof Error?error.message:"Terjadi kesalahan saat generate."},{status:500});
- }
-}   const model="gemini-3.8-flash";
-   let response:Response|null=null;
-   let result:any=null;
-   let lastError="";
-
-   for(let attempt=0;attempt<3;attempt++){
-    try{
-     const controller=new AbortController();
-     const timeout=setTimeout(()=>controller.abort(),45000);
      response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
       method:"POST",
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
@@ -128,22 +88,43 @@ export async function POST(request:Request){
       }),
       signal:controller.signal
      });
-     clearTimeout(timeout);
      result=await response.json();
-     if(response.ok)break;
-     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
-     if(![429,500,502,503,504].includes(response.status))break;
-     await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
-    }catch(error){
-     lastError=error instanceof Error && error.name==="AbortError"?"Gemini terlalu lama merespons.":error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
-     if(attempt<2)await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+    }finally{
+     clearTimeout(timeout);
     }
-   }
 
-   if(!response?.ok){
-    return NextResponse.json({
-     error:"Gemini belum merespons. Coba Generate lagi beberapa saat.",
-     detail:lastError
-    },{status:503});
-   }
+    if(response.ok)break;
 
+    lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
+    if(![429,500,502,503,504].includes(response.status))break;
+    if(attempt<2)await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+   }catch(error){
+    lastError=error instanceof Error&&error.name==="AbortError"?"Gemini terlalu lama merespons.":error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
+    if(attempt<2)await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+   }
+  }
+
+  if(!response?.ok){
+   return NextResponse.json({
+    error:"Gemini belum merespons. Coba Generate lagi beberapa saat.",
+    detail:lastError
+   },{status:503});
+  }
+
+  const text=result?.candidates?.[0]?.content?.parts
+   ?.filter((part:{text?:string})=>typeof part.text==="string")
+   ?.map((part:{text?:string})=>part.text||"")
+   .join("")
+   .trim();
+
+  if(!text){
+   return NextResponse.json({error:"Gemini tidak mengembalikan teks cerita."},{status:502});
+  }
+
+  return NextResponse.json({text});
+ }catch(error){
+  return NextResponse.json({
+   error:error instanceof Error?error.message:"Terjadi kesalahan saat generate."
+  },{status:500});
+ }
+}
