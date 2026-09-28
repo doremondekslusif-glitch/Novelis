@@ -103,7 +103,7 @@ export async function POST(request:Request){
       headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
       body:JSON.stringify({
        contents:[{role:"user",parts:[{text:prompt}]}],
-       generationConfig:{thinkingConfig:{thinkingLevel:"low"},responseMimeType:action==="memoryFoundation"?"application/json":"text/plain"}
+       generationConfig:{thinkingConfig:{thinkingLevel:"low"},responseMimeType:["memoryFoundation","storyIntelligence","qualityControl"].includes(action)?"application/json":"text/plain"}
       }),
       signal:controller.signal
      });
@@ -116,8 +116,12 @@ export async function POST(request:Request){
 
     geminiStatus=response.status;
     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
-    if(response.status===429 && attempt<1){
-     await new Promise(resolve=>setTimeout(resolve,1200));
+    const apiErrorCode=String(result?.error?.status||result?.error?.code||"").toLowerCase();
+    const retryable=response.status===503||response.status===408||(response.status===429&&!apiErrorCode.includes("quota"));
+    if(retryable&&attempt<1){
+     const retryAfter=Number(response.headers.get("retry-after")||0);
+     const delay=retryAfter>0?Math.min(retryAfter*1000,8000):2000;
+     await new Promise(resolve=>setTimeout(resolve,delay));
      continue;
     }
     break;
@@ -138,7 +142,9 @@ export async function POST(request:Request){
         ?`Model ${MODEL} tidak ditemukan atau tidak tersedia untuk API key ini.`
         :geminiStatus===429
           ?"Batas penggunaan Gemini tercapai. Tunggu sebentar lalu coba lagi. Jika terus muncul, cek kuota/RPM/TPM project Gemini yang dipakai API key ini."
-          :"Gemini gagal memproses permintaan.";
+          :geminiStatus===408
+            ?"Permintaan ke Gemini terlalu lama. Coba lagi."
+            :"Gemini gagal memproses permintaan.";
    return NextResponse.json({error,detail:lastError,status:geminiStatus||null},{status});
   }
 
