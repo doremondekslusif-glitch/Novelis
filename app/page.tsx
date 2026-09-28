@@ -123,11 +123,6 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  };
 
  const finalizeChapter=()=>{ save(); };
- useEffect(()=>{
-  if(!dirty)return;
-  const timer=setTimeout(()=>save(true),1200);
-  return()=>clearTimeout(timer);
- },[text,title,dirty]);
 
  const selectChapter=(id:string)=>{if(id===activeId)return;if(dirty)save(true);setActiveId(id)};
  const addChapter=()=>{if(dirty)save(true);const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false);setNotice("")};
@@ -162,10 +157,21 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis memori cerita.");
    const updatedChapters=chapters.map(c=>c.id===activeId?{...c,summary:String(data.summary||"").trim()}:c);
-   const nextCharacters=Array.isArray(data.characters)?data.characters as CharacterMemory[]:characterMemories;
-   const nextEntities=Array.isArray(data.entities)?data.entities as EntityMemory[]:entityMemories;
+   const incomingCharacters=Array.isArray(data.characters)?data.characters as CharacterMemory[]:[];
+   const incomingEntities=Array.isArray(data.entities)?data.entities as EntityMemory[]:[];
+   const mergeByName=<T extends {id:string;name:string}>(existing:T[],incoming:T[])=>{
+    const map=new Map(existing.map(item=>[item.name.trim().toLowerCase(),item]));
+    incoming.forEach(item=>{
+     const key=item.name.trim().toLowerCase();if(!key)return;
+     const old=map.get(key);map.set(key,old?{...old,...item,id:old.id}:item);
+    });
+    return Array.from(map.values());
+   };
+   const nextCharacters=mergeByName(characterMemories,incomingCharacters);
+   const nextEntities=mergeByName(entityMemories,incomingEntities);
    const needsUpdate=Boolean(data.memoryNeedsUpdate);
    setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setMemoryNeedsUpdate(needsUpdate);
+   setDirty(false);
    onUpdate({...novel,memory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,memoryNeedsUpdate:needsUpdate,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
    setNotice(needsUpdate?"Ringkasan tersimpan • ada perkembangan untuk Story Memory":"Ringkasan dan Memory Foundation diperbarui");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
