@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 
-type Action="generate"|"continue"|"improve"|"dialog"|"description";
+type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory";
 
 export async function POST(request:Request){
  try{
@@ -13,38 +13,53 @@ export async function POST(request:Request){
   const chapter=body?.chapter||{};
   const previousChapter=body?.previousChapter||null;
   const builder=novel.builder||{};
+  const memory=String(novel.memory||"");
+  const chapterSummaries=String(novel.chapterSummaries||"");
+  const chapters=Array.isArray(body?.chapters)?body.chapters:[];
+  const clip=(value:unknown,max:number)=>String(value||"").trim().slice(0,max);
+  const summaries=clip(chapterSummaries,7000);
+  const storyMemory=clip(memory,7000);
 
   const instructions:Record<Action,string>={
    generate:"Mulai Bab 1 dari awal. Tulis bab yang panjang, natural, imersif, dan kaya adegan. Targetkan sekitar 1200-1800 kata.",
    continue:"Lanjutkan cerita dari konteks terakhir yang diberikan. Jangan mengulang teks sebelumnya. Pastikan pembuka bab menyambung secara alami dengan kejadian bab sebelumnya. Targetkan sekitar 1200-1800 kata.",
    improve:"Perbaiki teks bab yang diberikan. Pertahankan inti cerita, fakta, karakter, urutan kejadian, dan gaya penulisannya. Perbaiki kalimat, alur, transisi, dialog, dan konsistensi tanpa mengubah maksud cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    dialog:"Perkaya bagian yang diberikan dengan dialog yang natural dan sesuai karakter. Pertahankan kejadian utama dan jangan mengubah inti cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
-   description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki."
+   description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
+   summarize:"Buat ringkasan bab yang padat tetapi informatif. Catat kejadian penting, perubahan hubungan, fakta baru, konflik, keputusan tokoh, lokasi, waktu, dan hal yang harus diingat untuk bab berikutnya. Jangan menambahkan kejadian yang tidak ada. Maksimal sekitar 180 kata.",
+   memory:"Bangun Story Memory permanen untuk novel ini. Gabungkan fondasi cerita dengan kejadian yang sudah terjadi. Prioritaskan fakta yang harus konsisten di bab-bab berikutnya: premis, tujuan tokoh, hubungan, rahasia, aturan dunia, konflik, perkembangan penting, fakta waktu/tempat, dan benang cerita yang belum selesai. Hapus detail yang tidak penting. Jangan mengarang fakta baru. Maksimal sekitar 700 kata."
   };
+
+  const currentText=clip(chapter.content,12000);
+  const previousText=clip(previousChapter?.content,6000);
+  const chapterData=chapters.map((item:{title?:string;content?:string;summary?:string},index:number)=>{
+   const summary=clip(item.summary,1200);
+   const content=clip(item.content,2500);
+   return "BAB "+(index+1)+" — "+(item.title||("Bab "+(index+1)))+"\nRingkasan: "+(summary||"-")+"\nIsi penting: "+(content||"-");
+  }).join("\n\n");
 
   const prompt=[
    "Kamu adalah AI penulis novel untuk aplikasi Novelis.",
    "Gunakan bahasa Indonesia yang natural, imersif, matang, dan enak dibaca.",
-   "Jangan memberi catatan, penjelasan, judul tambahan, atau markdown. Hanya teks cerita.",
+   "Jangan memberi catatan, penjelasan, judul tambahan, atau markdown kecuali diminta secara khusus oleh instruksi.",
    "Pertahankan kesinambungan karakter, dunia, konflik, hubungan tokoh, waktu, sebab-akibat, dan outline.",
    instructions[action],
    "",
    "FONDASI CERITA",
-   `Judul novel: ${novel.title||"Tanpa judul"}`,
-   `Genre: ${novel.genre||"Umum"}`,
-   `Premis: ${builder.premise||"-"}`,
-   `Karakter: ${builder.characters||"-"}`,
-   `Dunia cerita: ${builder.world||"-"}`,
-   `Outline keseluruhan: ${builder.outline||"-"}`,
+   "Judul novel: "+(novel.title||"Tanpa judul"),
+   "Genre: "+(novel.genre||"Umum"),
+   "Premis: "+(builder.premise||"-"),
+   "Karakter: "+(builder.characters||"-"),
+   "Dunia cerita: "+(builder.world||"-"),
+   "Outline keseluruhan: "+(builder.outline||"-"),
+   storyMemory ? "STORY MEMORY YANG HARUS DIJAGA:\n"+storyMemory : "",
+   summaries ? "RINGKASAN BAB TERDAHULU:\n"+summaries : "",
+   action==="memory" && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
    "",
-   `BAB: ${chapter.number||1}`,
-   `JUDUL BAB: ${chapter.title||"Bab tanpa judul"}`,
-   previousChapter?.content?.trim()
-    ? "KONTEKS AKHIR BAB SEBELUMNYA:\n"+previousChapter.content
-    : "",
-   chapter.content?.trim()
-    ? "TEKS BAB SEKARANG:\n"+chapter.content
-    : ""
+   "BAB: "+(chapter.number||1),
+   "JUDUL BAB: "+(chapter.title||"Bab tanpa judul"),
+   action!=="memory" && previousText ? "KONTEKS AKHIR BAB SEBELUMNYA:\n"+previousText : "",
+   currentText ? "TEKS BAB SEKARANG:\n"+currentText : ""
   ].filter(Boolean).join("\n\n");
 
   const models=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash-lite"];
