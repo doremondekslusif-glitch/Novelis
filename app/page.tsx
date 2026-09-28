@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2} from "lucide-react";
 
 type Chapter={id:string;title:string;content:string;status:"Draft"|"Selesai";summary?:string};
@@ -98,6 +98,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [memory,setMemory]=useState(novel.memory||"");
  const [memoryBusy,setMemoryBusy]=useState(false);
  const [finalizing,setFinalizing]=useState(false);
+ const finalizeLock=useRef(false);
  const [summaryBusy,setSummaryBusy]=useState(false);
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
  const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
@@ -119,7 +120,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  };
 
  const finalizeChapter=async()=>{
-  if(finalizing||!text.trim()) { if(!text.trim()) save(); return; }
+  if(finalizing||finalizeLock.current)return;
+  if(!text.trim()){save();return;}
+  finalizeLock.current=true;
   const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);
   setChapters(updatedChapters);
   setDirty(false);
@@ -158,6 +161,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    setSummaryBusy(false);
    setMemoryBusy(false);
    setFinalizing(false);
+   finalizeLock.current=false;
   }
  };
 
