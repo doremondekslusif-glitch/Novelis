@@ -11,7 +11,7 @@ export async function GET(){
  return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:MODEL});
 }
 
-type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"memoryFoundation";
+type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"memoryFoundation"|"storyIntelligence";
 
 export async function POST(request:Request){
  try{
@@ -41,7 +41,8 @@ export async function POST(request:Request){
    description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    summarize:"Buat ringkasan bab yang padat tetapi informatif. Catat kejadian penting, perubahan hubungan, fakta baru, konflik, keputusan tokoh, lokasi, waktu, dan hal yang harus diingat untuk bab berikutnya. Jangan menambahkan kejadian yang tidak ada. Maksimal sekitar 180 kata.",
    memory:"Bangun Story Memory permanen untuk novel ini. Gabungkan fondasi cerita dengan kejadian yang sudah terjadi. Prioritaskan fakta yang harus konsisten di bab-bab berikutnya: premis, tujuan tokoh, hubungan, rahasia, aturan dunia, konflik, perkembangan penting, fakta waktu/tempat, dan benang cerita yang belum selesai. Hapus detail yang tidak penting. Jangan mengarang fakta baru. Maksimal sekitar 700 kata.",
-   memoryFoundation:"Analisis bab ini untuk Memory Foundation. Buat ringkasan bab maksimal 180 kata. Ekstrak karakter dan entitas penting yang muncul atau berubah. Gabungkan dengan data yang sudah ada. Jangan menghapus karakter atau entitas lama hanya karena lama tidak muncul. Pertahankan nama dan ID yang sama jika itu entitas yang sama. Bedakan status aktif, meninggal, pergi, atau tidak diketahui. Tentukan memoryNeedsUpdate=true hanya jika ada perubahan penting pada alur utama, rahasia, tujuan, konflik, hubungan utama, aturan dunia, atau status penting karakter. Balas HANYA JSON valid dengan format {\"summary\":\"...\",\"characters\":[{\"id\":\"char-nama-normalized\",\"name\":\"...\",\"role\":\"...\",\"description\":\"...\",\"facts\":[\"...\"],\"status\":\"aktif\",\"firstChapter\":1,\"lastChapter\":1}],\"entities\":[{\"id\":\"entity-nama-normalized\",\"name\":\"...\",\"type\":\"location\",\"description\":\"...\",\"facts\":[\"...\"],\"firstChapter\":1,\"lastChapter\":1}],\"memoryNeedsUpdate\":false}. Jangan gunakan markdown."
+   memoryFoundation:"Analisis bab ini untuk Memory Foundation. Buat ringkasan bab maksimal 180 kata. Ekstrak karakter dan entitas penting yang muncul atau berubah. Gabungkan dengan data yang sudah ada. Jangan menghapus karakter atau entitas lama hanya karena lama tidak muncul. Pertahankan nama dan ID yang sama jika itu entitas yang sama. Bedakan status aktif, meninggal, pergi, atau tidak diketahui. Tentukan memoryNeedsUpdate=true hanya jika ada perubahan penting pada alur utama, rahasia, tujuan, konflik, hubungan utama, aturan dunia, atau status penting karakter. Balas HANYA JSON valid dengan format {\"summary\":\"...\",\"characters\":[{\"id\":\"char-nama-normalized\",\"name\":\"...\",\"role\":\"...\",\"description\":\"...\",\"facts\":[\"...\"],\"status\":\"aktif\",\"firstChapter\":1,\"lastChapter\":1}],\"entities\":[{\"id\":\"entity-nama-normalized\",\"name\":\"...\",\"type\":\"location\",\"description\":\"...\",\"facts\":[\"...\"],\"firstChapter\":1,\"lastChapter\":1}],\"memoryNeedsUpdate\":false}. Jangan gunakan markdown.",
+   storyIntelligence:"Analisis bab ini untuk Story Intelligence. Perbarui hubungan antar karakter, timeline kejadian, benang cerita yang belum selesai, dan perkembangan arc karakter. Pertahankan data lama; jangan menghapus data lama hanya karena tidak muncul di bab ini. Gunakan ID stabil untuk entitas yang sama. Tambahkan timeline hanya untuk kejadian penting bab ini. Pertahankan status thread open/resolved/uncertain berdasarkan bukti. Gabungkan perkembangan baru ke arc karakter. Balas HANYA JSON valid dengan format {relationships:[{id:rel-nama1-nama2,from:Nama 1,to:Nama 2,type:teman,status:aktif,facts:[...],lastChapter:1}],timeline:[{id:event-1-1,chapter:1,title:...,description:...,characters:[...],importance:tinggi}],threads:[{id:thread-nama,title:...,description:...,status:open,lastChapter:1,relatedCharacters:[...]}],arcs:[{character:...,arc:...,currentState:...,turningPoints:[...],lastChapter:1}]}. Jangan gunakan markdown."
   };
 
   const currentText=clip(chapter.content,12000);
@@ -78,6 +79,7 @@ export async function POST(request:Request){
    summaries ? "RINGKASAN BAB TERDAHULU:\n"+summaries : "",
    action==="memory" && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
    action==="memoryFoundation" && foundationData ? foundationData : "",
+   action==="storyIntelligence" ? "STORY INTELLIGENCE LAMA:\n"+JSON.stringify({relationships:novel.relationshipsMemory||[],timeline:novel.timeline||[],threads:novel.storyThreads||[],arcs:novel.characterArcs||[]}) : "",
    "",
    "BAB: "+(chapter.number||1),
    "JUDUL BAB: "+(chapter.title||"Bab tanpa judul"),
@@ -147,6 +149,13 @@ export async function POST(request:Request){
 
   if(!text){
    return NextResponse.json({error:"Gemini tidak mengembalikan teks cerita."},{status:502});
+  }
+
+  if(action==="storyIntelligence"){
+   try{
+    const parsed=JSON.parse(text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim());
+    return NextResponse.json({relationships:Array.isArray(parsed.relationships)?parsed.relationships:[],timeline:Array.isArray(parsed.timeline)?parsed.timeline:[],threads:Array.isArray(parsed.threads)?parsed.threads:[],arcs:Array.isArray(parsed.arcs)?parsed.arcs:[]});
+   }catch{return NextResponse.json({error:"Gemini mengembalikan format Story Intelligence yang tidak valid."},{status:502});}
   }
 
   if(action==="memoryFoundation"){
