@@ -6,8 +6,12 @@ import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Sea
 type Chapter={id:string;title:string;content:string;status:"Draft"|"Selesai";summary?:string};
 type CharacterMemory={id:string;name:string;role?:string;description?:string;facts?:string[];status?:string;firstChapter?:number;lastChapter?:number};
 type EntityMemory={id:string;name:string;type:"location"|"object"|"organization"|"other";description?:string;facts?:string[];firstChapter?:number;lastChapter?:number};
+type RelationshipMemory={id:string;from:string;to:string;type?:string;status?:string;facts?:string[];lastChapter?:number};
+type TimelineEvent={id:string;chapter:number;title:string;description:string;characters?:string[];importance?:string};
+type StoryThread={id:string;title:string;description:string;status:"open"|"resolved"|"uncertain";lastChapter?:number;relatedCharacters?:string[]};
+type CharacterArc={character:string;arc:string;currentState?:string;turningPoints?:string[];lastChapter?:number};
 type BuilderData={premise:string;characters:string;world:string;outline:string};
-type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;chapterList?:Chapter[]};
+type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;chapterList?:Chapter[]};
 
 const starter:Novel[]=[
  {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
@@ -103,6 +107,11 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [memoryNeedsUpdate,setMemoryNeedsUpdate]=useState(Boolean(novel.memoryNeedsUpdate));
  const [memoryBusy,setMemoryBusy]=useState(false);
  const [summaryBusy,setSummaryBusy]=useState(false);
+ const [intelligenceBusy,setIntelligenceBusy]=useState(false);
+ const [relationships,setRelationships]=useState<RelationshipMemory[]>(novel.relationshipsMemory||[]);
+ const [timeline,setTimeline]=useState<TimelineEvent[]>(novel.timeline||[]);
+ const [storyThreads,setStoryThreads]=useState<StoryThread[]>(novel.storyThreads||[]);
+ const [characterArcs,setCharacterArcs]=useState<CharacterArc[]>(novel.characterArcs||[]);
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
  const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
  const previousChapter=chapterNumber>1?chapters[chapterNumber-2]:null;
@@ -177,6 +186,27 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
  };
 
+ const runIntelligence=async()=>{
+  if(intelligenceBusy||!text.trim())return;
+  setIntelligenceBusy(true);setGenerateError("");setNotice("");
+  try{
+   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    action:"storyIntelligence",
+    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
+    chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
+   })});
+   const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis Story Intelligence.");
+   const nextRelationships=Array.isArray(data.relationships)?data.relationships as RelationshipMemory[]:relationships;
+   const nextTimeline=Array.isArray(data.timeline)?data.timeline as TimelineEvent[]:timeline;
+   const nextThreads=Array.isArray(data.threads)?data.threads as StoryThread[]:storyThreads;
+   const nextArcs=Array.isArray(data.arcs)?data.arcs as CharacterArc[]:characterArcs;
+   setRelationships(nextRelationships);setTimeline(nextTimeline);setStoryThreads(nextThreads);setCharacterArcs(nextArcs);
+   onUpdate({...novel,relationshipsMemory:nextRelationships,timeline:nextTimeline,storyThreads:nextThreads,characterArcs:nextArcs,storyIntelligenceLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+   setNotice("Story Intelligence diperbarui");
+  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis Story Intelligence.")}finally{setIntelligenceBusy(false)}
+ };
+
  const runMemory=async()=>{
   if(memoryBusy)return;
   setMemoryBusy(true);setGenerateError("");setNotice("");
@@ -187,7 +217,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal membangun Story Memory.");
    const nextMemory=(data.text||"").trim();if(!nextMemory)throw new Error("AI tidak menghasilkan Story Memory.");
    setMemory(nextMemory);
-   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate:false,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs,memoryNeedsUpdate:false,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
    setMemoryNeedsUpdate(false);
    setNotice("Story Memory diperbarui");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membangun Story Memory.")}finally{setMemoryBusy(false)}
@@ -216,6 +246,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
      <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Update Story Memory” untuk membuatnya, atau tulis sendiri."/>
      <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"} • {characterMemories.length} karakter • {entityMemories.length} entitas</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
     </div>
+    <div className="intelligenceBar"><div><b>Story Intelligence</b><span>{novel.storyIntelligenceLastAnalyzedChapter===chapterNumber?"Hubungan, timeline, benang cerita, dan arc karakter sudah dianalisis untuk bab ini.":"Analisis perkembangan cerita untuk menjaga kesinambungan antar-bab."}</span></div><button className="secondary mini" onClick={runIntelligence} disabled={intelligenceBusy||!text.trim()}>{intelligenceBusy?<><Loader2 size={13} className="spin"/> Menganalisis...</>:<><Sparkles size={13}/> Analisis Story Intelligence</>}</button></div>
     <div className="summaryBar"><div><b>Ringkasan & Memory Foundation</b><span>{active?.summary?.trim()?`Bab ${chapterNumber} sudah dianalisis. ${memoryNeedsUpdate?"Ada perkembangan yang perlu dipertimbangkan untuk Story Memory.":"Memory Foundation tetap selaras."}`:"Ringkas Bab untuk mencatat kejadian dan memperbarui memori karakter/entitas."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas & Analisis</>}</button></div>
     <div className="aiToolbar">
      <button onClick={()=>runAI("improve")} disabled={generating||!text.trim()}><WandSparkles size={15}/> Perbaiki</button>
