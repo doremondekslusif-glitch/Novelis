@@ -47,17 +47,41 @@ export async function POST(request:Request){
     : ""
   ].filter(Boolean).join("\n\n");
 
-  const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{
-   method:"POST",
-   headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-   body:JSON.stringify({
-    contents:[{role:"user",parts:[{text:prompt}]}],
-    generationConfig:{thinkingConfig:{thinkingLevel:"low"}}
-   })
-  });
-  const result=await response.json();
-  if(!response.ok){
-   return NextResponse.json({error:result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`},{status:response.status});
+  const models=["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash-lite"];
+  let response:Response|null=null;
+  let result:any=null;
+  let lastError="";
+
+  for(const model of models){
+   for(let attempt=0;attempt<2;attempt++){
+    try{
+     response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({
+       contents:[{role:"user",parts:[{text:prompt}]}],
+       generationConfig:{thinkingConfig:{thinkingLevel:"low"}}
+      })
+     });
+     result=await response.json();
+     if(response.ok)break;
+     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
+     const retryable=[429,500,502,503,504].includes(response.status);
+     if(!retryable)break;
+     await new Promise(resolve=>setTimeout(resolve,800*(attempt+1)));
+    }catch(error){
+     lastError=error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
+     await new Promise(resolve=>setTimeout(resolve,800*(attempt+1)));
+    }
+   }
+   if(response?.ok)break;
+  }
+
+  if(!response?.ok){
+   return NextResponse.json({
+    error:"Layanan AI sedang padat. Novelis sudah mencoba beberapa model Gemini, tetapi semuanya belum tersedia. Coba lagi beberapa saat.",
+    detail:lastError
+   },{status:503});
   }
   const text=result?.candidates?.[0]?.content?.parts
    ?.filter((part:{text?:string})=>typeof part.text==="string")
