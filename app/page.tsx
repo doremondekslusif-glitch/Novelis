@@ -89,32 +89,71 @@ function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;on
 }
 
 function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n:Novel)=>void}){
- const initial=normalizeNovel(novel);const [chapters,setChapters]=useState<Chapter[]>(initial.chapterList!);const [activeId,setActiveId]=useState(initial.chapterList![0].id);const [title,setTitle]=useState("");const [text,setText]=useState("");const [dirty,setDirty]=useState(false);const [generating,setGenerating]=useState(false);const [generateError,setGenerateError]=useState("");
+ const initial=normalizeNovel(novel);
+ const [chapters,setChapters]=useState<Chapter[]>(initial.chapterList!);
+ const [activeId,setActiveId]=useState(initial.chapterList![0].id);
+ const [title,setTitle]=useState("");const [text,setText]=useState("");
+ const [dirty,setDirty]=useState(false);const [generating,setGenerating]=useState(false);const [generateError,setGenerateError]=useState("");
+ const [notice,setNotice]=useState("");
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
- useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("")}},[activeId]);
- const save=()=>{const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||"Bab tanpa judul",content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);setChapters(updatedChapters);onUpdate({...novel,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});setDirty(false)};
- const selectChapter=(id:string)=>{if(dirty)save();setActiveId(id)};
- const addChapter=()=>{if(dirty)save();const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false)};
+ const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
+ const previousChapter=chapterNumber>1?chapters[chapterNumber-2]:null;
+
+ useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
+
+ const save=(silent=false)=>{
+  const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:text.trim().length>80?"Selesai":"Draft"}:c);
+  setChapters(updatedChapters);
+  onUpdate({...novel,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja"});
+  setDirty(false);
+  if(!silent)setNotice("Tersimpan");
+ };
+
+ useEffect(()=>{
+  if(!dirty)return;
+  const timer=setTimeout(()=>save(true),1200);
+  return()=>clearTimeout(timer);
+ },[text,title,dirty]);
+
+ const selectChapter=(id:string)=>{if(dirty)save(true);setActiveId(id)};
+ const addChapter=()=>{if(dirty)save(true);const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false);setNotice("")};
  const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);setDirty(true)};
- const generateChapter=async()=>{if(generating)return;setGenerating(true);setGenerateError("");try{
-   const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
-   const currentIndex=chapterNumber-1;
-   const previousChapter=chapterNumber>1?chapters[currentIndex-1]:null;
+
+ const runAI=async(action:"generate"|"continue"|"improve"|"dialog"|"description")=>{
+  if(generating)return;
+  setGenerating(true);setGenerateError("");setNotice("");
+  try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-     novel:{title:novel.title,genre:novel.genre,builder:novel.builder},
-     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
-     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null
+    action,novel:{title:novel.title,genre:novel.genre,builder:novel.builder},
+    chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null
    })});
-   const data=await res.json();
-   if(!res.ok)throw new Error(data.error||"Gagal membuat cerita.");
-   const generated=(data.text||"").trim();
-   if(!generated)throw new Error("AI tidak menghasilkan teks.");
-   setText(text.trim()?text.trim()+"\\n\\n"+generated:generated);
-   setDirty(true);
- }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membuat cerita.")}finally{setGenerating(false)}};
- return <div className="workspace"><button className="back" onClick={()=>{if(dirty)save();onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
-  <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><button className="primary" onClick={save}><Save size={16}/> {dirty?"Simpan":"Tersimpan"}</button></div>
-  <div className="editorGrid"><div className="chapterList"><div className="chapterHead"><b>DAFTAR BAB</b><button className="iconBtn" onClick={addChapter} title="Tambah bab"><Plus size={16}/></button></div>{chapters.map(c=><div className={c.id===activeId?"chapter active":"chapter"} key={c.id}><button onClick={()=>selectChapter(c.id)}><span>{c.title}</span><small>{c.status}</small></button></div>)}<button className="chapter add" onClick={addChapter}>+ Tambah bab</button>{chapters.length>1&&<button className="deleteChapter" onClick={removeChapter}><Trash2 size={14}/> Hapus bab aktif</button>}</div>
-   <div className="editorPanel"><input className="chapterTitle" value={title} onChange={e=>{setTitle(e.target.value);setDirty(true)}} placeholder="Judul bab"/><textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true)}} placeholder="Mulai menulis cerita..."/>{generateError&&<div className="generateError">{generateError}</div>}<div className="aiToolbar"><button><WandSparkles size={15}/> Lanjutkan</button><button>Perbaiki</button><button>Dialog</button><button>Deskripsi</button><button onClick={generateChapter} disabled={generating}><Play size={15}/> {generating?"Generating...":(chapters.findIndex(c=>c.id===activeId)===0?"Generate":"Lanjutkan")}</button></div></div>
-  </div></div>
+   const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
+   const generated=(data.text||"").trim();if(!generated)throw new Error("AI tidak menghasilkan teks.");
+   if(action==="generate"||action==="continue")setText(text.trim()?text.trim()+"\n\n"+generated:generated);
+   else setText(generated);
+   setDirty(true);setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":action==="description"?"Deskripsi diperkaya":"Cerita berhasil dibuat");
+  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal memproses tulisan.")}finally{setGenerating(false)}
+ };
+
+ const primaryAction=chapterNumber===1?"generate":"continue";
+ const primaryLabel=chapterNumber===1?"Generate":"Lanjutkan";
+ return <div className="workspace">
+  <button className="back" onClick={()=>{if(dirty)save(true);onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
+  <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><div className="editorSave"><span className={dirty?"unsaved":"saved"}>{dirty?"● Belum disimpan":notice||"✓ Tersimpan"}</span><button className="primary" onClick={()=>save()}><Save size={16}/> Simpan</button></div></div>
+  <div className="editorGrid">
+   <div className="chapterList"><div className="chapterHead"><b>DAFTAR BAB</b><button className="iconBtn" onClick={addChapter} title="Tambah bab"><Plus size={16}/></button></div>{chapters.map((c,i)=><div className={c.id===activeId?"chapter active":"chapter"} key={c.id}><button onClick={()=>selectChapter(c.id)}><span>{c.title}</span><small>{c.status}</small></button></div>)}<button className="chapter add" onClick={addChapter}>+ Tambah bab</button>{chapters.length>1&&<button className="deleteChapter" onClick={removeChapter}><Trash2 size={14}/> Hapus bab aktif</button>}</div>
+   <div className="editorPanel">
+    <div className="editorTop"><input className="chapterTitle" value={title} onChange={e=>{setTitle(e.target.value);setDirty(true);setNotice("")}} placeholder="Judul bab"/><span>Bab {chapterNumber}</span></div>
+    <textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true);setNotice("")}} placeholder="Mulai menulis cerita..."/>
+    {generateError&&<div className="generateError">⚠ {generateError}</div>}
+    <div className="aiToolbar">
+     <button onClick={()=>runAI("improve")} disabled={generating||!text.trim()}><WandSparkles size={15}/> Perbaiki</button>
+     <button onClick={()=>runAI("dialog")} disabled={generating||!text.trim()}><MessageCircle size={15}/> Dialog</button>
+     <button onClick={()=>runAI("description")} disabled={generating||!text.trim()}><BookOpen size={15}/> Deskripsi</button>
+     <button className="aiPrimary" onClick={()=>runAI(primaryAction)} disabled={generating}>{generating?<><Loader2 size={15} className="spin"/> Generating...</>:<><Play size={15}/> {primaryLabel}</>}</button>
+    </div>
+   </div>
+  </div>
+ </div>
 }
