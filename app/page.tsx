@@ -12,8 +12,9 @@ type StoryThread={id:string;title:string;description:string;status:"open"|"resol
 type CharacterArc={character:string;arc:string;currentState?:string;turningPoints?:string[];lastChapter?:number};
 type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"character"|"timeline"|"world"|"plot"|"style";title:string;evidence:string;suggestion:string};
 type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string};
+type MemoryStatus="green"|"yellow"|"red";
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
-type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;chapterList?:Chapter[]};
+type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
 
 const starter:Novel[]=[
  {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
@@ -118,6 +119,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [characterMemories,setCharacterMemories]=useState<CharacterMemory[]>(novel.charactersMemory||[]);
  const [entityMemories,setEntityMemories]=useState<EntityMemory[]>(novel.entitiesMemory||[]);
  const [memoryNeedsUpdate,setMemoryNeedsUpdate]=useState(Boolean(novel.memoryNeedsUpdate));
+ const [memoryStatus,setMemoryStatus]=useState<MemoryStatus>(novel.memoryStatus||(novel.memoryNeedsUpdate?"yellow":"green"));
+ const [memoryStatusChapter,setMemoryStatusChapter]=useState<number|undefined>(novel.memoryStatusChapter);
  const [memoryBusy,setMemoryBusy]=useState(false);
  const [summaryBusy,setSummaryBusy]=useState(false);
  const [intelligenceBusy,setIntelligenceBusy]=useState(false);
@@ -210,9 +213,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const nextCharacters=mergeByName(characterMemories,incomingCharacters);
    const nextEntities=mergeByName(entityMemories,incomingEntities);
    const needsUpdate=Boolean(data.memoryNeedsUpdate);
-   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setMemoryNeedsUpdate(needsUpdate);
+   const status:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:(needsUpdate?"yellow":"green");
+   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setMemoryNeedsUpdate(needsUpdate);setMemoryStatus(status);setMemoryStatusChapter(chapterNumber);
    setDirty(false);
-   onUpdate({...novel,memory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,memoryNeedsUpdate:needsUpdate,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
+   onUpdate({...novel,memory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,memoryNeedsUpdate:needsUpdate,memoryStatus:status,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
    setNotice(needsUpdate?"Ringkasan tersimpan • ada perkembangan untuk Story Memory":"Ringkasan dan Memory Foundation diperbarui");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
  };
@@ -282,16 +286,16 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal membangun Story Memory.");
    const nextMemory=(data.text||"").trim();if(!nextMemory)throw new Error("AI tidak menghasilkan Story Memory.");
    setMemory(nextMemory);
-   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs,memoryNeedsUpdate:false,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
-   setMemoryNeedsUpdate(false);
-   setNotice("Story Memory diperbarui");
+   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+   setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
+   setNotice("Story Memory diperbarui • status kembali hijau");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membangun Story Memory.")}finally{setMemoryBusy(false)}
  };
 
  const saveMemory=()=>{
-  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate:false,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
-  setMemoryNeedsUpdate(false);
-  setNotice("Story Memory tersimpan");
+  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+  setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
+  setNotice("Story Memory tersimpan • status kembali hijau");
  };
 
  const primaryAction=chapterNumber===1?"generate":"continue";
@@ -324,8 +328,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     </div>
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
     <div className="memoryPanel">
-     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY</span><small>Memory alur besar tetap kamu kontrol. Ringkas Bab akan memperbarui Memory Foundation dan memberi tanda jika Story Memory perlu diperbarui.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> Update Story Memory</>}</button></div>
-     {memoryNeedsUpdate&&<div className="memoryAlert">⚠ Ada perkembangan cerita yang terdeteksi dan belum dimasukkan ke Story Memory.</div>}
+     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY <span className={"memoryStatusDot "+memoryStatus}>● {memoryStatus==="green"?"HIJAU":memoryStatus==="yellow"?"KUNING":"MERAH"}</span></span><small>🟢 Tidak ada perubahan penting • 🟡 Ada perkembangan • 🔴 Ada perubahan besar atau risiko konflik. Ringkas Bab menentukan status; update mengembalikan status ke hijau.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy||memoryStatus==="green"||!text.trim()}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> {memoryStatus==="red"?"Update Memory • Penting":memoryStatus==="yellow"?"Update Story Memory":"Memory sudah mutakhir"}</>}</button></div>
+     {memoryStatus==="yellow"&&<div className="memoryAlert yellow">🟡 Ada perkembangan cerita yang perlu dipertimbangkan untuk Story Memory.</div>}
+     {memoryStatus==="red"&&<div className="memoryAlert red">🔴 Ada perubahan besar atau potensi konflik dengan Story Memory. Sebaiknya perbarui sebelum melanjutkan bab berikutnya.</div>}
+     {memoryStatus==="green"&&<div className="memoryAlert green">🟢 Story Memory dianggap mutakhir berdasarkan analisis terakhir{memoryStatusChapter?` (Bab ${memoryStatusChapter}).`:"."}</div>}
      <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Update Story Memory” untuk membuatnya, atau tulis sendiri."/>
      <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"} • {characterMemories.length} karakter • {entityMemories.length} entitas</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
     </div>
