@@ -38,7 +38,14 @@ export default function AuthPanel(){
       provider:"google",
       options:{redirectTo:`${window.location.origin}/auth/callback`}
     });
-    if(error){console.error(error);setState("error");setBusy(false);}
+    if(error){
+      console.error("Google OAuth error",error);
+      setState("error");
+      setBusy(false);
+      alert(error.message.includes("Unsupported provider")
+        ?"Google Login belum diaktifkan di Supabase. Aktifkan Authentication → Providers → Google terlebih dahulu."
+        :`Login Google gagal: ${error.message}`);
+    }
   };
 
   const signOut=async()=>{
@@ -66,6 +73,10 @@ export default function AuthPanel(){
       </div>
       <button className="iconBtn" onClick={signOut} title="Keluar" disabled={busy}><LogOut size={16}/></button>
     </div>;
+  }
+
+  if(state==="error"&&hasSupabaseConfig){
+    return <div style={{display:"grid",gap:8}}><button className="primary full" onClick={signIn} disabled={busy}><LogIn size={16}/> Coba masuk dengan Google lagi</button><small style={{color:"#b91c1c"}}>Google Provider di Supabase belum aktif atau konfigurasi OAuth belum lengkap.</small></div>;
   }
 
   if(!hasSupabaseConfig){
