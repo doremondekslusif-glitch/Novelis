@@ -129,8 +129,8 @@ const activeFiltered=filtered.filter(n=>n.title.toLowerCase().includes(query.toL
    const safe=normalizeNovel(n);
    if(format==="json"){downloadFile(safe.title.replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".json",JSON.stringify(safe,null,2),"application/json");return;}
    if(format==="txt"){
-     const body=safe.chapterList?.map((c,i)=>`BAB ${i+1} — ${c.title}\\n\\n${c.content||"(Belum ada isi)"}`).join("\\n\\n==============================\\n\\n")||"";
-     downloadFile(safe.title.replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".txt",safe.title+"\\n\\n"+body,"text/plain;charset=utf-8");return;
+     const body=safe.chapterList?.map((c,i)=>`BAB ${i+1} — ${c.title}\n\n${c.content||"(Belum ada isi)"}`).join("\n\n==============================\n\n")||"";
+     downloadFile(safe.title.replace(/[^a-z0-9]+/gi,"-").toLowerCase()+".txt",safe.title+"\n\n"+body,"text/plain;charset=utf-8");return;
    }
    const popup=window.open("","_blank","width=900,height=700");
    if(!popup){alert("Izinkan pop-up browser untuk membuat PDF.");return;}
