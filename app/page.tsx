@@ -33,6 +33,20 @@ function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Ma
 function nowIso(){return new Date().toISOString();}
 
 type LocalStore={version:number;updatedAt:string;novels:Novel[]};
+type StorageStatus="idle"|"saving"|"saved"|"error";
+
+function writeLocalStore(novels:Novel[],page:string,selected:Novel|null){
+ try{
+  const store:LocalStore={version:STORAGE_VERSION,updatedAt:nowIso(),novels:novels.map(normalizeNovel)};
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
+  localStorage.setItem(PAGE_KEY,page);
+  if(selected)localStorage.setItem(SELECTED_KEY,selected.id);else localStorage.removeItem(SELECTED_KEY);
+  return true;
+ }catch(error){
+  console.error("Novelis local persistence failed",error);
+  return false;
+ }
+}
 
 function normalizeNovel(n:Partial<Novel>):Novel{
  const chapterList:Chapter[]=Array.isArray(n.chapterList)&&n.chapterList.length
@@ -74,7 +88,7 @@ function parseLocalStore(raw:string|null):LocalStore{
 const initialStarter=starter.map(normalizeNovel);
 
 export default function Home(){
- const [novels,setNovels]=useState<Novel[]>(initialStarter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false);
+ const [novels,setNovels]=useState<Novel[]>(initialStarter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false),[storageStatus,setStorageStatus]=useState<StorageStatus>("idle");
  const [title,setTitle]=useState(""),[genres,setGenres]=useState<string[]>(["Fantasy"]),[idea,setIdea]=useState("");
 
  useEffect(()=>{try{
@@ -85,18 +99,17 @@ export default function Home(){
  }catch{}finally{setHydrated(true)}},[]);
 
  useEffect(()=>{if(!hydrated)return;
-   try{
-     const store:LocalStore={version:STORAGE_VERSION,updatedAt:nowIso(),novels:novels.map(normalizeNovel)};
-     localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
-     localStorage.setItem(PAGE_KEY,page);
-     if(selected)localStorage.setItem(SELECTED_KEY,selected.id);else localStorage.removeItem(SELECTED_KEY);
-   }catch{}
+   setStorageStatus("saving");
+   const timer=window.setTimeout(()=>{
+     setStorageStatus(writeLocalStore(novels,page,selected)?"saved":"error");
+   },150);
+   return()=>window.clearTimeout(timer);
  },[novels,page,selected,hydrated]);
 
  // Local data is versioned and normalized so it can later be migrated to a cloud schema without changing novel content.
  const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
  const openNovel=(n:Novel)=>{const safe=normalizeNovel(n);setSelected(safe);setPage("editor")};
- const updateNovel=(updated:Novel)=>{const safe=normalizeNovel(updated);setNovels(v=>v.map(n=>n.id===safe.id?safe:n));setSelected(safe)};
+ const updateNovel=(updated:Novel)=>{const safe={...normalizeNovel(updated),updatedAt:nowIso(),updated:"Baru saja"};setNovels(v=>v.map(n=>n.id===safe.id?safe:n));setSelected(safe)};
  const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const timestamp=nowIso();const n:Novel={id:createId("novel"),title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",createdAt:timestamp,updatedAt:timestamp,idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:createId("chapter1"),title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
  const nav=(p:string)=>{setSelected(null);setPage(p)};
 
@@ -192,7 +205,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
  const persistChapter=(updatedChapters:Chapter[],nextMemory=memory,extra:Partial<Novel>={})=>{
-  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updated:"Baru saja",...extra});
+  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
  };
 
  const wordCount=text.trim()?text.trim().split(/\s+/).length:0;
@@ -207,6 +220,12 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setDirty(false);
   if(!silent)setNotice("Tersimpan");
  };
+
+ useEffect(()=>{
+  if(!dirty)return;
+  const timer=window.setTimeout(()=>save(true),1200);
+  return()=>window.clearTimeout(timer);
+ },[dirty,text,title,activeId]);
 
  useEffect(()=>{
   const onKeyDown=(event:KeyboardEvent)=>{
@@ -354,7 +373,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const primaryLabel=chapterNumber===1?"Generate":"Lanjutkan";
  return <div className={focusMode?"workspace writerFocus":"workspace"}>
   <button className="back" onClick={()=>{if(dirty)save(true);onBack()}}><ArrowLeft size={17}/> Semua Novel</button>
-  <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><div className="editorSave"><span className={dirty?"unsaved":"saved"}>{dirty?"● Belum disimpan":notice||"✓ Tersimpan"}</span><button className="primary" onClick={finalizeChapter} disabled={false}><Save size={16}/> Simpan</button></div></div>
+  <div className="workspaceHead"><div><p className="eyebrow">NOVEL EDITOR • {novel.genre}</p><h1>{novel.title}</h1><p className="sub">{chapters.length} bab • {active?.status||"Draft"}</p></div><div className="editorSave"><span className={dirty?"unsaved":"saved"}>{dirty?"● Autosave menunggu...":notice||"✓ Tersimpan"}</span><button className="primary" onClick={finalizeChapter} disabled={false}><Save size={16}/> Simpan</button></div></div>
   <div className="editorGrid">
    <div className="chapterList"><div className="chapterHead"><b>DAFTAR BAB</b><button className="iconBtn" onClick={addChapter} title="Tambah bab"><Plus size={16}/></button></div>{chapters.map((c,i)=><div className={c.id===activeId?"chapter active":"chapter"} key={c.id}><button onClick={()=>selectChapter(c.id)}><span>{c.title}</span><small>{c.status}</small></button></div>)}<button className="chapter add" onClick={addChapter}>+ Tambah bab</button>{chapters.length>1&&<button className="deleteChapter" onClick={removeChapter}><Trash2 size={14}/> Hapus bab aktif</button>}</div>
    <div className="editorPanel">
