@@ -26,6 +26,7 @@ export async function POST(request:Request){
   const chapter=body?.chapter||{};
   const previousChapter=body?.previousChapter||null;
   const builder=novel.builder||{};
+  const locked=Array.isArray(builder.locked)?builder.locked:[];
   const memory=String(novel.memory||"");
   const chapterSummaries=String(novel.chapterSummaries||"");
   const chapters=Array.isArray(body?.chapters)?body.chapters:[];
@@ -71,8 +72,19 @@ export async function POST(request:Request){
    "",
    "FONDASI CERITA",
    "Judul novel: "+(novel.title||"Tanpa judul"),
-   "Genre: "+(novel.genre||"Umum"),
+   "Genre utama/pendukung: "+(novel.genre||"Umum"),
    "Premis: "+(builder.premise||"-"),
+   "Tema: "+(builder.theme||"-"),
+   "Tone: "+(builder.tone||"-"),
+   "Gaya penulisan: "+(builder.style||"-"),
+   "Sudut pandang: "+(builder.pointOfView||"-"),
+   "Target pembaca: "+(builder.audience||"-"),
+   "Panjang novel: "+(builder.length||"-"),
+   "Target jumlah bab: "+(builder.chapterTarget||"-"),
+   "Jenis ending: "+(builder.ending||"-"),
+   "Kebebasan AI: "+(builder.aiFreedom||"-"),
+   "CANON TERKUNCI: "+(locked.length?locked.join(", "):"Tidak ada; gunakan penilaian kreatif sesuai brief."),
+   "ATURAN CANON: Jika sebuah field termasuk CANON TERKUNCI, jangan mengubahnya, meniadakannya, atau membuat perkembangan yang bertentangan tanpa persetujuan pengguna. Jika tidak dikunci, AI boleh mengembangkan detail secara masuk akal, tetapi tetap menjaga konsistensi dengan keseluruhan cerita." ,
    "Karakter: "+(builder.characters||"-"),
    "Dunia cerita: "+(builder.world||"-"),
    "Outline keseluruhan: "+(builder.outline||"-"),
