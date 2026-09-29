@@ -4,13 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic="force-dynamic";
 
 export async function GET(request:Request){
-  const requestUrl=new URL(request.url);
-  const code=requestUrl.searchParams.get("code");
-  const nextParam=requestUrl.searchParams.get("next")||"/";
+  const {searchParams,origin}=new URL(request.url);
+  const code=searchParams.get("code");
+  const nextParam=searchParams.get("next")||"/";
   const next=nextParam.startsWith("/")&&!nextParam.startsWith("//")?nextParam:"/";
 
-  if(!code||!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY){
-    return redirectWithError(requestUrl);
+  if(!code){
+    return NextResponse.redirect(new URL("/?auth_error=missing_code",origin));
   }
 
   try{
@@ -19,20 +19,23 @@ export async function GET(request:Request){
 
     if(error){
       console.error("Novelis OAuth callback failed:",error);
-      return redirectWithError(requestUrl);
+      return NextResponse.redirect(new URL("/?auth_error=oauth_callback",origin));
     }
 
-    const response=NextResponse.redirect(new URL(next,requestUrl.origin));
+    // Prefer the original host when the app is behind Vercel/load balancing.
+    const forwardedHost=request.headers.get("x-forwarded-host");
+    const isLocal=process.env.NODE_ENV==="development";
+    const redirectOrigin=isLocal
+      ? origin
+      : forwardedHost
+        ? `https://${forwardedHost}`
+        : origin;
+
+    const response=NextResponse.redirect(`${redirectOrigin}${next}`);
     response.headers.set("Cache-Control","private, no-store, max-age=0");
     return response;
   }catch(error){
     console.error("Novelis OAuth callback exception:",error);
-    return redirectWithError(requestUrl);
+    return NextResponse.redirect(new URL("/?auth_error=oauth_callback",origin));
   }
-}
-
-function redirectWithError(requestUrl:URL){
-  const response=NextResponse.redirect(new URL("/?auth_error=oauth_callback",requestUrl.origin));
-  response.headers.set("Cache-Control","private, no-store, max-age=0");
-  return response;
 }
