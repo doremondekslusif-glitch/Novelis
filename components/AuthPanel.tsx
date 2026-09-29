@@ -4,7 +4,15 @@ import { useEffect,useMemo,useState } from "react";
 import { LogIn,LogOut,Cloud,Loader2 } from "lucide-react";
 import { createClient,hasSupabaseConfig } from "@/lib/supabase/client";
 
-type CloudState="checking"|"signed_out"|"signed_in"|"error";
+type CloudState="checking"|"signed_out"|"signed_in";
+
+function mapUser(u:any){
+  return u?{
+    email:u.email,
+    name:u.user_metadata?.full_name||u.user_metadata?.name,
+    avatar:u.user_metadata?.avatar_url
+  }:null;
+}
 
 export default function AuthPanel(){
   const [user,setUser]=useState<{email?:string;name?:string;avatar?:string}|null>(null);
@@ -15,38 +23,47 @@ export default function AuthPanel(){
   useEffect(()=>{
     let mounted=true;
     if(!supabase){setState("signed_out");return ()=>{mounted=false};}
-    const loadUser=async()=>{
-      const {data,error}=await supabase.auth.getUser();
+
+    const loadSession=async()=>{
+      // Read the local/browser session first. getUser() performs a network
+      // request and can temporarily fail even when the OAuth session exists.
+      const {data,error}=await supabase.auth.getSession();
       if(!mounted)return;
+
       if(error){
-        console.error("Supabase getUser failed",error);
-        setState("error");
+        console.error("Supabase getSession failed",error);
+        setState("signed_out");
         return;
       }
-      const u=data.user;
-      setUser(u?{email:u.email,name:u.user_metadata?.full_name||u.user_metadata?.name,avatar:u.user_metadata?.avatar_url}:null);
+
+      const u=data.session?.user;
+      setUser(mapUser(u));
       setState(u?"signed_in":"signed_out");
     };
-    loadUser();
+
+    loadSession();
+
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{
+      if(!mounted)return;
       const u=session?.user;
-      setUser(u?{email:u.email,name:u.user_metadata?.full_name||u.user_metadata?.name,avatar:u.user_metadata?.avatar_url}:null);
+      setUser(mapUser(u));
       setState(u?"signed_in":"signed_out");
     });
+
     return()=>{mounted=false;subscription.unsubscribe()};
-  },[]);
+  },[supabase]);
 
   const signIn=async()=>{
-    if(busy)return;
+    if(busy||!supabase)return;
     setBusy(true);
-    if(!supabase){setState("error");setBusy(false);return;}
     const {error}=await supabase.auth.signInWithOAuth({
       provider:"google",
-      options:{redirectTo:`${window.location.origin}/auth/callback`}
+      options:{
+        redirectTo:`${window.location.origin}/auth/callback`
+      }
     });
     if(error){
       console.error("Google OAuth error",error);
-      setState("error");
       setBusy(false);
       alert(error.message.includes("Unsupported provider")
         ?"Google Login belum diaktifkan di Supabase. Aktifkan Authentication → Providers → Google terlebih dahulu."
@@ -55,11 +72,10 @@ export default function AuthPanel(){
   };
 
   const signOut=async()=>{
-    if(busy)return;
+    if(busy||!supabase)return;
     setBusy(true);
-    if(!supabase){setBusy(false);return;}
     const {error}=await supabase.auth.signOut();
-    if(error)console.error(error);
+    if(error)console.error("Supabase signOut failed",error);
     setBusy(false);
   };
 
@@ -78,13 +94,6 @@ export default function AuthPanel(){
         <small style={{display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email||"Google Account"} • ☁ Cloud</small>
       </div>
       <button className="iconBtn" onClick={signOut} title="Keluar" disabled={busy}><LogOut size={16}/></button>
-    </div>;
-  }
-
-  if(state==="error"&&hasSupabaseConfig){
-    return <div style={{display:"grid",gap:8}}>
-      <button className="primary full" onClick={()=>{setState("checking");window.location.reload();}} disabled={busy}><LogIn size={16}/> Periksa sesi lagi</button>
-      <small style={{color:"#b91c1c"}}>Sesi Google belum terbaca oleh browser. Jika login Google tadi berhasil, jangan buat akun baru; muat ulang sesi terlebih dahulu.</small>
     </div>;
   }
 
