@@ -124,6 +124,7 @@ export function useCloudSync<T extends CloudNovel>(
     const timer=window.setTimeout(async()=>{
       try{
         const supabase=supabaseRef.current;
+        if(!supabase)return;
         const {data:{user}}=await supabase.auth.getUser();
         if(!user)return;
 
