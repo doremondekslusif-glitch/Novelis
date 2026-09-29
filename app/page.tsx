@@ -115,8 +115,7 @@ export default function Home(){
  const updateNovel=(updated:Novel)=>{const safe={...normalizeNovel(updated),updatedAt:nowIso(),updated:"Baru saja"};setNovels(v=>v.map(n=>n.id===safe.id?safe:n));setSelected(safe)};
  const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const timestamp=nowIso();const n:Novel={id:createId("novel"),title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",createdAt:timestamp,updatedAt:timestamp,idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:createId("chapter1"),title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
  const nav=(p:string)=>{setSelected(null);setMenuId(null);setPage(p)};
- const updateNovel=(updated:Novel)=>{const safe={...normalizeNovel(updated),updatedAt:nowIso(),updated:"Baru saja"};setNovels(v=>v.map(n=>n.id===safe.id?safe:n));setSelected(safe)};
- const renameNovel=(n:Novel)=>{const next=window.prompt("Nama novel:",n.title)?.trim();if(!next||next===n.title)return;updateNovel({...n,title:next});setMenuId(null)};
+  const renameNovel=(n:Novel)=>{const next=window.prompt("Nama novel:",n.title)?.trim();if(!next||next===n.title)return;updateNovel({...n,title:next});setMenuId(null)};
  const duplicateNovel=(n:Novel)=>{const now=nowIso();const copy:Novel={...normalizeNovel(n),id:createId("novel"),title:n.title+" (Salinan)",createdAt:now,updatedAt:now,updated:"Baru duplikat",archivedAt:undefined,deletedAt:undefined,chapterList:n.chapterList?.map(c=>({...c,id:createId("chapter")}))};setNovels(v=>[copy,...v]);setMenuId(null)};
  const archiveNovel=(n:Novel)=>{updateNovel({...n,archivedAt:nowIso(),deletedAt:undefined});setMenuId(null)};
  const trashNovel=(n:Novel)=>{if(!window.confirm("Pindahkan novel ini ke Sampah?"))return;updateNovel({...n,deletedAt:nowIso(),archivedAt:undefined});setMenuId(null);if(selected?.id===n.id)setSelected(null)};
