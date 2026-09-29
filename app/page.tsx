@@ -12,7 +12,7 @@ type StoryThread={id:string;title:string;description:string;status:"open"|"resol
 type CharacterArc={character:string;arc:string;currentState?:string;turningPoints?:string[];lastChapter?:number};
 type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"character"|"timeline"|"world"|"plot"|"style";title:string;evidence:string;suggestion:string};
 type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string};
-type BuilderData={premise:string;characters:string;world:string;outline:string};
+type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
 type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;chapterList?:Chapter[]};
 
 const starter:Novel[]=[
@@ -21,7 +21,7 @@ const starter:Novel[]=[
  {title:"Project Eclipse",genre:"Sci-Fi • Mystery",chapters:5,progress:25,updated:"3 hari lalu",builder:{premise:"",characters:"",world:"",outline:""},chapterList:Array.from({length:5},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))}
 ];
 
-const emptyBuilder:BuilderData={premise:"",characters:"",world:"",outline:""};
+const emptyBuilder:BuilderData={premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""};
 
 function normalizeNovel(n:Novel):Novel{
  const chapterList:Chapter[]=n.chapterList?.length ? n.chapterList : [{id:"1",title:"Bab 1",content:"",status:"Draft" as const}];
@@ -30,7 +30,7 @@ function normalizeNovel(n:Novel):Novel{
 
 export default function Home(){
  const [novels,setNovels]=useState<Novel[]>(starter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false);
- const [title,setTitle]=useState(""),[genre,setGenre]=useState("Fantasy"),[idea,setIdea]=useState("");
+ const [title,setTitle]=useState(""),[genres,setGenres]=useState<string[]>(["Fantasy"]),[idea,setIdea]=useState("");
 
  useEffect(()=>{try{
    const raw=localStorage.getItem("novelis:novels");const savedPage=localStorage.getItem("novelis:page");const selectedTitle=localStorage.getItem("novelis:selected");
@@ -44,7 +44,7 @@ export default function Home(){
  const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
  const openNovel=(n:Novel)=>{setSelected(normalizeNovel(n));setPage("editor")};
  const updateNovel=(updated:Novel)=>{const safe=normalizeNovel(updated);setNovels(v=>v.map(n=>n.title===safe.title?safe:n));setSelected(safe)};
- const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const n:Novel={title:name,genre,chapters:1,progress:0,updated:"Baru dibuat",idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
+ const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const n:Novel={title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
  const nav=(p:string)=>{setSelected(null);setPage(p)};
 
  return <main className="shell">
@@ -73,7 +73,7 @@ export default function Home(){
 
   {showCreate&&<div className="modalWrap" onMouseDown={e=>e.target===e.currentTarget&&setShowCreate(false)}><div className="modal"><div className="modalHead"><div><span className="pill"><Sparkles size={13}/> LANGKAH 1</span><h2>Buat Novel Baru</h2><p>Isi dasar cerita. Setelah ini kamu masuk ke Story Builder.</p></div><button className="close" onClick={()=>setShowCreate(false)}><X size={20}/></button></div>
    <label>Judul novel<input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder="Contoh: Senja yang Tak Pernah Pulang"/></label>
-   <label>Genre<select value={genre} onChange={e=>setGenre(e.target.value)}><option>Fantasy</option><option>Romance</option><option>Drama</option><option>Mystery</option><option>Science Fiction</option><option>Thriller</option></select></label>
+   <label>Genre utama<select value={genres[0]||"Fantasy"} onChange={e=>setGenres(v=>[e.target.value,...v.filter(x=>x!==e.target.value)])}><option>Fantasy</option><option>Romance</option><option>Drama</option><option>Mystery</option><option>Science Fiction</option><option>Thriller</option><option>Horror</option><option>Adventure</option><option>Historical</option></select></label><label>Genre pendukung <small style={{fontWeight:400,color:"#999"}}>(maks. 3)</small><div className="genreGrid">{["Fantasy","Romance","Drama","Mystery","Science Fiction","Thriller","Horror","Adventure","Historical","Comedy"].filter(g=>g!==(genres[0]||"Fantasy")).map(g=><button type="button" key={g} className={genres.includes(g)?"genreChip selected":"genreChip"} onClick={()=>setGenres(v=>v.includes(g)?v.filter(x=>x!==g):v.length<4?[...v,g]:v)}>{g}</button>)}</div></label>
    <label>Ide cerita<textarea value={idea} onChange={e=>setIdea(e.target.value)} placeholder="Ceritakan ide singkat novelmu..."/></label>
    <button className="primary full" onClick={createNovel}><Sparkles size={17}/> Lanjutkan ke Story Builder</button>
   </div></div>}
@@ -82,17 +82,28 @@ export default function Home(){
 
 function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;onUpdate:(n:Novel)=>void;onStart:()=>void}){
  const [step,setStep]=useState(1);const [data,setData]=useState<BuilderData>({...emptyBuilder,...novel.builder});const [saved,setSaved]=useState(true);
- const labels=["Premis & Arah","Karakter Utama","Dunia Cerita","Outline Bab"];const keys:["premise","characters","world","outline"]=["premise","characters","world","outline"];
- const value=data[keys[step-1]];
- const setValue=(v:string)=>{setData(d=>({...d,[keys[step-1]]:v}));setSaved(false)};
+ const labels=["Konsep & Arah","Karakter Utama","Dunia Cerita","Outline Bab"];
+ const setField=(key:keyof BuilderData,value:string)=>{setData(d=>({...d,[key]:value}));setSaved(false)};
+ const toggleLock=(key:string)=>setData(d=>({...d,locked:d.locked.includes(key)?d.locked.filter(x=>x!==key):[...d.locked,key]}));
  const save=()=>{onUpdate({...novel,builder:data,idea:data.premise,updated:"Baru saja"});setSaved(true)};
  const next=()=>{save();if(step<4)setStep(step+1);else onStart()};
+ const SelectField=({label,value,options,field}:{label:string;value:string;options:[string,string][];field:keyof BuilderData})=><label className="builderField"><span>{label}</span><select value={value} onChange={e=>setField(field,e.target.value)}>{options.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>;
  return <div className="workspace"><button className="back" onClick={onBack}><ArrowLeft size={17}/> Kembali</button>
-  <div className="workspaceHead"><div><p className="eyebrow">STORY BUILDER</p><h1>{novel.title}</h1><p className="sub">Susun fondasi novel. Semua langkah sekarang tersimpan.</p></div><span className="status">Langkah {step} / 4</span></div>
+  <div className="workspaceHead"><div><p className="eyebrow">STORY BUILDER</p><h1>{novel.title}</h1><p className="sub">Bangun fondasi cerita. Informasi yang dikunci tidak boleh diubah AI tanpa persetujuanmu.</p></div><span className="status">Langkah {step} / 4</span></div>
   <div className="builderGrid"><div className="steps">{labels.map((label,i)=><button key={label} className={step===i+1?"step active":"step"} onClick={()=>{if(!saved)save();setStep(i+1)}}><b>0{i+1}</b>{label}{i<step&&<Check size={15}/>}</button>)}</div>
-   <div className="builderPanel"><span className="pill light"><Sparkles size={13}/> AI ASSISTED</span><h2>{labels[step-1]}</h2><p>{step===1?(novel.idea||"Tentukan premis, konflik utama, tujuan cerita, dan arah ending."):step===2?"Buat tokoh utama dan pendukung: tujuan, sifat, latar belakang, hubungan, serta konflik.":step===3?"Bangun lokasi, waktu, aturan dunia, budaya, teknologi, atau sistem kekuatan.":"Tulis alur besar dari awal sampai akhir. Satu baris dapat mewakili satu bab."}</p>
-    <textarea value={value} onChange={e=>setValue(e.target.value)} placeholder={step===4?"Contoh:\nBab 1 — Pertemuan\nBab 2 — Rahasia\nBab 3 — Konflik...":"Tulis detail di sini..."}/>
-    <div className="builderActions"><button className="secondary" onClick={()=>setValue(value?value+"\n\n[AI akan membantu mengembangkan bagian ini.]":"[AI akan membantu mengembangkan bagian ini.]")}><WandSparkles size={16}/> Bantu AI</button><div className="actionRight">{!saved&&<small className="saveHint">Perubahan belum disimpan</small>}<button className="secondary" onClick={save}><Save size={16}/> Simpan</button><button className="primary" onClick={next}>{step===4?"Mulai Menulis":"Lanjut"} <ChevronRight size={16}/></button></div></div>
+   <div className="builderPanel">
+    {step===1&&<><span className="pill light"><Sparkles size={13}/> KONSEP NOVEL</span><h2>Identitas & arah cerita</h2><p>Genre utama menentukan identitas cerita. Genre pendukung memberi ruang untuk unsur tambahan tanpa mengacaukan fokus utama.</p>
+     <div className="builderForm"><label>Premis / ide utama<textarea value={data.premise} onChange={e=>setField("premise",e.target.value)} placeholder="Apa inti cerita yang ingin kamu ceritakan?"/></label><label>Tema<textarea value={data.theme} onChange={e=>setField("theme",e.target.value)} placeholder="Contoh: pengorbanan, keluarga, kepercayaan..."/></label>
+      <div className="builderCols"><SelectField label="Tone / nuansa" value={data.tone} field="tone" options={[["dark","Gelap"],["light","Ringan"],["warm","Hangat"],["tense","Tegang"],["mysterious","Misterius"],["epic","Epik"],["emotional","Emosional"]]}/><SelectField label="Gaya penulisan" value={data.style} field="style" options={[["simple","Sederhana"],["descriptive","Deskriptif"],["poetic","Puitis"],["cinematic","Sinematik"],["dynamic","Cepat & dinamis"],["dialogue","Banyak dialog"],["balanced","Seimbang"]]}/></div>
+      <div className="builderCols"><SelectField label="Sudut pandang" value={data.pointOfView} field="pointOfView" options={[["first","Orang pertama"],["third_limited","Orang ketiga terbatas"],["third_omniscient","Orang ketiga serba tahu"],["multi","Berganti POV"]]}/><SelectField label="Target pembaca" value={data.audience} field="audience" options={[["anak","Anak-anak"],["remaja","Remaja"],["ya","Young Adult"],["dewasa","Dewasa"],["umum","Umum"]]}/></div>
+      <div className="builderCols"><SelectField label="Panjang novel" value={data.length} field="length" options={[["pendek","Pendek"],["sedang","Sedang"],["panjang","Panjang"],["sangat_panjang","Sangat panjang"]]}/><label className="builderField"><span>Target jumlah bab</span><input type="number" min="1" max="500" value={data.chapterTarget} onChange={e=>setField("chapterTarget",e.target.value)}/></label></div>
+      <div className="builderCols"><SelectField label="Ending" value={data.ending} field="ending" options={[["happy","Happy ending"],["sad","Sad ending"],["bittersweet","Bittersweet"],["open","Open ending"],["tragic","Tragic"],["not_set","Belum ditentukan"]]}/><SelectField label="Kebebasan AI" value={data.aiFreedom} field="aiFreedom" options={[["assistant","Pendamping — patuh pada konsep"],["co_writer","Co-writer — boleh mengembangkan"],["creative","Creative writer — lebih bebas"]]}/></div>
+      <div className="lockBox"><div><b>Aturan AI</b><small>Pilih informasi yang harus dianggap sebagai canon.</small></div><div className="lockGrid">{[["premise","Premis"],["theme","Tema"],["tone","Tone"],["style","Gaya"],["pointOfView","POV"],["audience","Target pembaca"],["length","Panjang"],["chapterTarget","Jumlah bab"],["ending","Ending"]].map(([k,l])=><button type="button" key={k} className={data.locked.includes(k)?"lock active":"lock"} onClick={()=>toggleLock(k)}><span>{data.locked.includes(k)?"🔒":"○"}</span>{l}</button>)}</div><small className="lockHint">AI boleh mengembangkan detail yang tidak dikunci, tetapi tidak boleh mengubah canon yang dikunci.</small></div>
+     </div></>}
+    {step===2&&<><span className="pill light"><Users size={13}/> CHARACTER INTELLIGENCE</span><h2>Karakter Utama</h2><p>Definisikan tokoh, motivasi, tujuan, ketakutan, hubungan, dan arah perkembangan mereka.</p><textarea value={data.characters} onChange={e=>setField("characters",e.target.value)} placeholder="Contoh:\nProtagonis: ...\nTujuan: ...\nKetakutan: ...\nAntagonis: ...\nHubungan: ..."/></>}
+    {step===3&&<><span className="pill light"><Globe2 size={13}/> WORLD BUILDING</span><h2>Dunia Cerita</h2><p>Bangun lokasi, waktu, aturan dunia, budaya, teknologi, sistem kekuatan, dan batasannya.</p><textarea value={data.world} onChange={e=>setField("world",e.target.value)} placeholder="Tulis aturan dunia dan detail penting yang harus konsisten..."/></>}
+    {step===4&&<><span className="pill light"><BookMarked size={13}/> STORY OUTLINE</span><h2>Outline dari awal sampai akhir</h2><p>Gunakan target bab sebagai kerangka. Tentukan konflik, perkembangan karakter, klimaks, resolusi, dan hook tiap bagian.</p><textarea value={data.outline} onChange={e=>setField("outline",e.target.value)} placeholder="Contoh:\nBab 1 — Pertemuan\nTujuan: ...\nKonflik: ...\nHook: ...\n\nBab 2 — Rahasia..."/></>}
+    <div className="builderActions"><button className="secondary" onClick={()=>setField(step===1?"premise":step===2?"characters":step===3?"world":"outline",(data[step===1?"premise":step===2?"characters":step===3?"world":"outline"]||"")+"\n\n[AI akan membantu mengembangkan bagian ini.]")}><WandSparkles size={16}/> Bantu AI</button><div className="actionRight">{!saved&&<small className="saveHint">Perubahan belum disimpan</small>}<button className="secondary" onClick={save}><Save size={16}/> Simpan</button><button className="primary" onClick={next}>{step===4?"Mulai Menulis":"Lanjut"} <ChevronRight size={16}/></button></div></div>
    </div></div></div>
 }
 
