@@ -2,7 +2,7 @@
 
 import { useEffect,useState } from "react";
 import { LogIn,LogOut,Cloud,Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient,hasSupabaseConfig } from "@/lib/supabase/client";
 
 type CloudState="checking"|"signed_out"|"signed_in"|"error";
 
@@ -10,10 +10,11 @@ export default function AuthPanel(){
   const [user,setUser]=useState<{email?:string;name?:string;avatar?:string}|null>(null);
   const [state,setState]=useState<CloudState>("checking");
   const [busy,setBusy]=useState(false);
-  const supabase=createClient();
+  const supabase=hasSupabaseConfig?createClient():null;
 
   useEffect(()=>{
     let mounted=true;
+    if(!supabase){setState("signed_out");return ()=>{mounted=false};}
     supabase.auth.getUser().then(({data,error})=>{
       if(!mounted)return;
       if(error){setState("error");return;}
@@ -32,6 +33,7 @@ export default function AuthPanel(){
   const signIn=async()=>{
     if(busy)return;
     setBusy(true);
+    if(!supabase){setState("error");setBusy(false);return;}
     const {error}=await supabase.auth.signInWithOAuth({
       provider:"google",
       options:{redirectTo:`${window.location.origin}/auth/callback`}
@@ -42,6 +44,7 @@ export default function AuthPanel(){
   const signOut=async()=>{
     if(busy)return;
     setBusy(true);
+    if(!supabase){setBusy(false);return;}
     const {error}=await supabase.auth.signOut();
     if(error)console.error(error);
     setBusy(false);
@@ -63,6 +66,10 @@ export default function AuthPanel(){
       </div>
       <button className="iconBtn" onClick={signOut} title="Keluar" disabled={busy}><LogOut size={16}/></button>
     </div>;
+  }
+
+  if(!hasSupabaseConfig){
+    return <div style={{display:"grid",gap:8}}><small style={{color:"#b45309"}}><Cloud size={13}/> Cloud belum dikonfigurasi. Novelis tetap menggunakan penyimpanan lokal.</small></div>;
   }
 
   return <div style={{display:"grid",gap:8}}>
