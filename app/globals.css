@@ -13,3 +13,14 @@
 .genreGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:7px}.genreChip{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 10px;text-align:left;cursor:pointer;color:#655d56;font-size:11px}.genreChip.selected{border-color:#b59ae9;background:#f1edf9;color:#6540c4;font-weight:700}.builderForm{display:grid;gap:12px}.builderForm>label,.builderField{display:block;font-size:12px;font-weight:700;color:#5d5751}.builderForm textarea{min-height:105px;margin-top:7px}.builderCols{display:grid;grid-template-columns:1fr 1fr;gap:10px}.builderField select,.builderField input{display:block;width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;margin-top:7px;outline:0;background:#fcfbfa}.lockBox{border:1px solid #e9e1f4;background:#faf8fd;border-radius:12px;padding:13px;margin-top:2px}.lockBox>b,.lockBox small{display:block}.lockBox>div:first-child{display:flex;justify-content:space-between;gap:10px;align-items:start}.lockBox small{font-size:10px;color:#918a83;font-weight:400}.lockGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.lock{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px;text-align:left;cursor:pointer;font-size:10px;color:#777}.lock.active{border-color:#c2a8ef;background:#f1edf9;color:#6540c4;font-weight:700}.lockHint{margin-top:9px!important}.builderPanel{min-width:0}@media(max-width:700px){.builderCols{grid-template-columns:1fr}.lockGrid{grid-template-columns:1fr 1fr}.genreGrid{grid-template-columns:1fr}}
 
 .memoryStatusDot{display:inline-flex;align-items:center;gap:4px;margin-left:7px;font-size:9px;font-weight:800;letter-spacing:.03em}.memoryStatusDot.green{color:#4d7a59}.memoryStatusDot.yellow{color:#a97922}.memoryStatusDot.red{color:#a44c4c}.memoryAlert.yellow{background:#fff8e8;border-color:#f1dfb2;color:#8b6a28}.memoryAlert.red{background:#fff0f0;border-color:#edcaca;color:#9a4a4a}.memoryAlert.green{background:#f1faf3;border-color:#d4e8d8;color:#52765b}.memoryPanel .secondary.mini:disabled{opacity:.65;cursor:not-allowed}
+
+/* Project action menu */
+.novelCard{position:relative;display:block;width:100%;text-align:left;color:inherit}
+.cardMenuWrap{position:relative;z-index:4}
+.menuTrigger{display:grid;place-items:center;width:32px;height:32px;border-radius:8px}
+.menuTrigger:hover{background:#f3efe9;color:#5f5750}
+.cardMenu{position:absolute;right:0;top:35px;width:190px;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:0 16px 35px #32243d20;padding:6px;z-index:20}
+.cardMenu button{display:flex;width:100%;border:0;background:transparent;border-radius:7px;padding:9px 10px;text-align:left;cursor:pointer;color:#625b55;font-size:11px}
+.cardMenu button:hover{background:#f7f3ee}
+.cardMenu button.danger{color:#a24d4d}
+.cardMenu button.danger:hover{background:#fff1f1}
