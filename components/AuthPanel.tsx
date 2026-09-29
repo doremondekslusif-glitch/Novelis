@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect,useState } from "react";
+import { useEffect,useMemo,useState } from "react";
 import { LogIn,LogOut,Cloud,Loader2 } from "lucide-react";
 import { createClient,hasSupabaseConfig } from "@/lib/supabase/client";
 
@@ -10,18 +10,24 @@ export default function AuthPanel(){
   const [user,setUser]=useState<{email?:string;name?:string;avatar?:string}|null>(null);
   const [state,setState]=useState<CloudState>("checking");
   const [busy,setBusy]=useState(false);
-  const supabase=hasSupabaseConfig?createClient():null;
+  const supabase=useMemo(()=>hasSupabaseConfig?createClient():null,[]);
 
   useEffect(()=>{
     let mounted=true;
     if(!supabase){setState("signed_out");return ()=>{mounted=false};}
-    supabase.auth.getUser().then(({data,error})=>{
+    const loadUser=async()=>{
+      const {data,error}=await supabase.auth.getUser();
       if(!mounted)return;
-      if(error){setState("error");return;}
+      if(error){
+        console.error("Supabase getUser failed",error);
+        setState("error");
+        return;
+      }
       const u=data.user;
       setUser(u?{email:u.email,name:u.user_metadata?.full_name||u.user_metadata?.name,avatar:u.user_metadata?.avatar_url}:null);
       setState(u?"signed_in":"signed_out");
-    });
+    };
+    loadUser();
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{
       const u=session?.user;
       setUser(u?{email:u.email,name:u.user_metadata?.full_name||u.user_metadata?.name,avatar:u.user_metadata?.avatar_url}:null);
@@ -76,7 +82,10 @@ export default function AuthPanel(){
   }
 
   if(state==="error"&&hasSupabaseConfig){
-    return <div style={{display:"grid",gap:8}}><button className="primary full" onClick={signIn} disabled={busy}><LogIn size={16}/> Coba masuk dengan Google lagi</button><small style={{color:"#b91c1c"}}>Google Provider di Supabase belum aktif atau konfigurasi OAuth belum lengkap.</small></div>;
+    return <div style={{display:"grid",gap:8}}>
+      <button className="primary full" onClick={()=>{setState("checking");window.location.reload();}} disabled={busy}><LogIn size={16}/> Periksa sesi lagi</button>
+      <small style={{color:"#b91c1c"}}>Sesi Google belum terbaca oleh browser. Jika login Google tadi berhasil, jangan buat akun baru; muat ulang sesi terlebih dahulu.</small>
+    </div>;
   }
 
   if(!hasSupabaseConfig){
