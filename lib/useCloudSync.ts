@@ -11,9 +11,9 @@ function newer(a?:string,b?:string){
   return at>=bt;
 }
 
-export function useCloudSync(
-  novels:CloudNovel[],
-  setNovels:(value:CloudNovel[]|((prev:CloudNovel[])=>CloudNovel[]))=>void
+export function useCloudSync<T extends CloudNovel>(
+  novels:T[],
+  setNovels:(value:T[]|((prev:T[])=>T[]))=>void
 ){
   const [cloudReady,setCloudReady]=useState(false);
   const supabaseRef=useRef(createClient());
@@ -39,7 +39,7 @@ export function useCloudSync(
         return;
       }
 
-      const cloud=(data||[]).map(row=>({...((row.data||{}) as CloudNovel),id:String(row.novel_id),updatedAt:(row.data as CloudNovel)?.updatedAt||row.updated_at}));
+      const cloud=(data||[]).map(row=>({...((row.data||{}) as T),id:String(row.novel_id),updatedAt:(row.data as T)?.updatedAt||row.updated_at}));
       const localById=new Map(novels.map(n=>[n.id,n]));
       const cloudById=new Map(cloud.map(n=>[n.id,n]));
       const merged:CloudNovel[]=[];
