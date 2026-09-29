@@ -71,7 +71,9 @@ function parseLocalStore(raw:string|null):LocalStore{
  }
 }
 
-const initialStarter=starter.map(normalizeNovel);\n\nexport default function Home(){
+const initialStarter=starter.map(normalizeNovel);
+
+export default function Home(){
  const [novels,setNovels]=useState<Novel[]>(initialStarter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false);
  const [title,setTitle]=useState(""),[genres,setGenres]=useState<string[]>(["Fantasy"]),[idea,setIdea]=useState("");
 
@@ -91,7 +93,8 @@ const initialStarter=starter.map(normalizeNovel);\n\nexport default function Hom
    }catch{}
  },[novels,page,selected,hydrated]);
 
- // Local data is versioned and normalized so it can later be migrated to a cloud schema without changing novel content.\n const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
+ // Local data is versioned and normalized so it can later be migrated to a cloud schema without changing novel content.
+ const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
  const openNovel=(n:Novel)=>{const safe=normalizeNovel(n);setSelected(safe);setPage("editor")};
  const updateNovel=(updated:Novel)=>{const safe=normalizeNovel(updated);setNovels(v=>v.map(n=>n.id===safe.id?safe:n));setSelected(safe)};
  const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const timestamp=nowIso();const n:Novel={id:createId("novel"),title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",createdAt:timestamp,updatedAt:timestamp,idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:createId("chapter1"),title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
