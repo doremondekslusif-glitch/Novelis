@@ -14,9 +14,9 @@ type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"charact
 type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string};
 type MemoryStatus="green"|"yellow"|"red";
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
-type Novel={title:string;genre:string;chapters:number;progress:number;updated:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
+type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
 
-const starter:Novel[]=[
+const starter:Partial<Novel>[]=[
  {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
  {title:"Senja di Kota Hujan",genre:"Romance • Drama",chapters:8,progress:42,updated:"Kemarin",builder:{premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""},chapterList:Array.from({length:8},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
  {title:"Project Eclipse",genre:"Sci-Fi • Mystery",chapters:5,progress:25,updated:"3 hari lalu",builder:{premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""},chapterList:Array.from({length:5},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))}
@@ -24,28 +24,77 @@ const starter:Novel[]=[
 
 const emptyBuilder:BuilderData={premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""};
 
-function normalizeNovel(n:Novel):Novel{
- const chapterList:Chapter[]=n.chapterList?.length ? n.chapterList : [{id:"1",title:"Bab 1",content:"",status:"Draft" as const}];
- return {...n,builder:{...emptyBuilder,...n.builder},chapterList,chapters:chapterList.length};
+const STORAGE_KEY="novelis:novels";
+const STORAGE_VERSION=2;
+const PAGE_KEY="novelis:page";
+const SELECTED_KEY="novelis:selected";
+
+function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
+function nowIso(){return new Date().toISOString();}
+
+type LocalStore={version:number;updatedAt:string;novels:Novel[]};
+
+function normalizeNovel(n:Partial<Novel>):Novel{
+ const chapterList:Chapter[]=Array.isArray(n.chapterList)&&n.chapterList.length
+   ?n.chapterList.map((c,i)=>({...c,id:c.id||createId(`chapter${i+1}`),title:c.title||`Bab ${i+1}`,content:c.content||"",status:c.status==="Selesai"?"Selesai":"Draft"}))
+   :[{id:createId("chapter1"),title:"Bab 1",content:"",status:"Draft" as const}];
+ const createdAt=n.createdAt||nowIso();
+ const updatedAt=n.updatedAt||createdAt;
+ return {
+   ...n,
+   id:n.id||createId("novel"),
+   title:String(n.title||"Novel Tanpa Judul"),
+   genre:String(n.genre||""),
+   progress:Number.isFinite(Number(n.progress))?Number(n.progress):0,
+   updated:String(n.updated||"Baru saja"),
+   createdAt,
+   updatedAt,
+   builder:{...emptyBuilder,...n.builder},
+   chapterList,
+   chapters:chapterList.length
+ };
 }
 
-export default function Home(){
- const [novels,setNovels]=useState<Novel[]>(starter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false);
+function parseLocalStore(raw:string|null):LocalStore{
+ if(!raw)return {version:STORAGE_VERSION,updatedAt:nowIso(),novels:starter.map(normalizeNovel)};
+ try{
+   const parsed=JSON.parse(raw);
+   const source=Array.isArray(parsed)?parsed:parsed?.novels;
+   if(!Array.isArray(source))throw new Error("Invalid local store");
+   return {
+     version:STORAGE_VERSION,
+     updatedAt:typeof parsed?.updatedAt==="string"?parsed.updatedAt:nowIso(),
+     novels:source.map((n:Partial<Novel>)=>normalizeNovel(n))
+   };
+ }catch{
+   return {version:STORAGE_VERSION,updatedAt:nowIso(),novels:starter.map(normalizeNovel)};
+ }
+}
+
+const initialStarter=starter.map(normalizeNovel);\n\nexport default function Home(){
+ const [novels,setNovels]=useState<Novel[]>(initialStarter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false);
  const [title,setTitle]=useState(""),[genres,setGenres]=useState<string[]>(["Fantasy"]),[idea,setIdea]=useState("");
 
  useEffect(()=>{try{
-   const raw=localStorage.getItem("novelis:novels");const savedPage=localStorage.getItem("novelis:page");const selectedTitle=localStorage.getItem("novelis:selected");
-   const loaded=raw?JSON.parse(raw):starter;const safe=Array.isArray(loaded)?loaded.map(normalizeNovel):starter;
-   setNovels(safe);if(savedPage)setPage(savedPage);
-   if(selectedTitle){const found=safe.find((n:Novel)=>n.title===selectedTitle);if(found)setSelected(found)}
+   const store=parseLocalStore(localStorage.getItem(STORAGE_KEY));
+   setNovels(store.novels);const savedPage=localStorage.getItem(PAGE_KEY);const selectedId=localStorage.getItem(SELECTED_KEY);
+   if(savedPage)setPage(savedPage);
+   if(selectedId){const found=store.novels.find(n=>n.id===selectedId);if(found)setSelected(found)}
  }catch{}finally{setHydrated(true)}},[]);
 
- useEffect(()=>{if(!hydrated)return;localStorage.setItem("novelis:novels",JSON.stringify(novels));localStorage.setItem("novelis:page",page);if(selected)localStorage.setItem("novelis:selected",selected.title);else localStorage.removeItem("novelis:selected")},[novels,page,selected,hydrated]);
+ useEffect(()=>{if(!hydrated)return;
+   try{
+     const store:LocalStore={version:STORAGE_VERSION,updatedAt:nowIso(),novels:novels.map(normalizeNovel)};
+     localStorage.setItem(STORAGE_KEY,JSON.stringify(store));
+     localStorage.setItem(PAGE_KEY,page);
+     if(selected)localStorage.setItem(SELECTED_KEY,selected.id);else localStorage.removeItem(SELECTED_KEY);
+   }catch{}
+ },[novels,page,selected,hydrated]);
 
- const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
- const openNovel=(n:Novel)=>{setSelected(normalizeNovel(n));setPage("editor")};
- const updateNovel=(updated:Novel)=>{const safe=normalizeNovel(updated);setNovels(v=>v.map(n=>n.title===safe.title?safe:n));setSelected(safe)};
- const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const n:Novel={title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:"1",title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
+ // Local data is versioned and normalized so it can later be migrated to a cloud schema without changing novel content.\n const filtered=novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase()));
+ const openNovel=(n:Novel)=>{const safe=normalizeNovel(n);setSelected(safe);setPage("editor")};
+ const updateNovel=(updated:Novel)=>{const safe=normalizeNovel(updated);setNovels(v=>v.map(n=>n.id===safe.id?safe:n));setSelected(safe)};
+ const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const timestamp=nowIso();const n:Novel={id:createId("novel"),title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",createdAt:timestamp,updatedAt:timestamp,idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:createId("chapter1"),title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
  const nav=(p:string)=>{setSelected(null);setPage(p)};
 
  return <main className="shell">
