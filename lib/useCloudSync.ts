@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect,useRef,useState} from "react";
-import {createClient} from "@/lib/supabase/client";
+import {createClient,hasSupabaseConfig} from "@/lib/supabase/client";
 
 type CloudNovel={id:string;updatedAt?:string;[key:string]:unknown};
 
@@ -17,7 +17,8 @@ export function useCloudSync<T extends CloudNovel>(
   enabled:boolean
 ){
   const [cloudReady,setCloudReady]=useState(false);
-  const supabaseRef=useRef(createClient());
+  const supabaseRef=useRef<ReturnType<typeof createClient>|null>(null);
+  if(hasSupabaseConfig&&!supabaseRef.current)supabaseRef.current=createClient();
   const novelsRef=useRef(novels);
   const lastUploadRef=useRef("");
   const loadingRef=useRef(false);
@@ -27,6 +28,7 @@ export function useCloudSync<T extends CloudNovel>(
   useEffect(()=>{
     if(!enabled)return;
     const supabase=supabaseRef.current;
+    if(!supabase||!hasSupabaseConfig)return;
     let active=true;
 
     const load=async()=>{
