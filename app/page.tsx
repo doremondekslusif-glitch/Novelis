@@ -119,7 +119,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [characterMemories,setCharacterMemories]=useState<CharacterMemory[]>(novel.charactersMemory||[]);
  const [entityMemories,setEntityMemories]=useState<EntityMemory[]>(novel.entitiesMemory||[]);
  const [memoryNeedsUpdate,setMemoryNeedsUpdate]=useState(Boolean(novel.memoryNeedsUpdate));
- const [memoryStatus,setMemoryStatus]=useState<MemoryStatus>(novel.memoryStatus||(novel.memoryNeedsUpdate?"yellow":"green"));
+ const [memoryStatus,setMemoryStatus]=useState<MemoryStatus>(novel.memoryStatus||(novel.memoryNeedsUpdate?"yellow":novel.memoryLastAnalyzedChapter?"green":"yellow"));
  const [memoryStatusChapter,setMemoryStatusChapter]=useState<number|undefined>(novel.memoryStatusChapter);
  const [memoryBusy,setMemoryBusy]=useState(false);
  const [summaryBusy,setSummaryBusy]=useState(false);
@@ -329,7 +329,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
     <div className="memoryPanel">
      <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY <span className={"memoryStatusDot "+memoryStatus}>● {memoryStatus==="green"?"HIJAU":memoryStatus==="yellow"?"KUNING":"MERAH"}</span></span><small>🟢 Tidak ada perubahan penting • 🟡 Ada perkembangan • 🔴 Ada perubahan besar atau risiko konflik. Ringkas Bab menentukan status; update mengembalikan status ke hijau.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy||memoryStatus==="green"||!text.trim()}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> {memoryStatus==="red"?"Update Memory • Penting":memoryStatus==="yellow"?"Update Story Memory":"Memory sudah mutakhir"}</>}</button></div>
-     {memoryStatus==="yellow"&&<div className="memoryAlert yellow">🟡 Ada perkembangan cerita yang perlu dipertimbangkan untuk Story Memory.</div>}
+     {memoryStatus==="yellow"&&<div className="memoryAlert yellow">{memoryStatusChapter?"🟡 Ada perkembangan cerita yang perlu dipertimbangkan untuk Story Memory.":"🟡 Story Memory belum dianalisis. Ringkas & Analisis bab ini untuk menentukan apakah ada perubahan penting."}</div>}
      {memoryStatus==="red"&&<div className="memoryAlert red">🔴 Ada perubahan besar atau potensi konflik dengan Story Memory. Sebaiknya perbarui sebelum melanjutkan bab berikutnya.</div>}
      {memoryStatus==="green"&&<div className="memoryAlert green">🟢 Story Memory dianggap mutakhir berdasarkan analisis terakhir{memoryStatusChapter?` (Bab ${memoryStatusChapter}).`:"."}</div>}
      <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Update Story Memory” untuk membuatnya, atau tulis sendiri."/>
