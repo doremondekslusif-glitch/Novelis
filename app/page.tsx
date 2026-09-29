@@ -160,7 +160,8 @@ const activeFiltered=filtered.filter(n=>n.title.toLowerCase().includes(query.toL
     <button className={page==="drafts"?"active":""} onClick={()=>nav("drafts")}><FileText size={17}/> Draft & Bab</button>
     <button className={page==="characters"?"active":""} onClick={()=>nav("characters")}><Users size={17}/> Karakter</button>
     <button className={page==="world"?"active":""} onClick={()=>nav("world")}><Globe2 size={17}/> Dunia Cerita</button>
-     <button className={page==="archive"?"active":""} onClick={()=>nav("archive")}><BookMarked size={17}/> Arsip</button>\n     <button className={page==="trash"?"active":""} onClick={()=>nav("trash")}><Trash2 size={17}/> Sampah</button>
+     <button className={page==="archive"?"active":""} onClick={()=>nav("archive")}><BookMarked size={17}/> Arsip</button>
+     <button className={page==="trash"?"active":""} onClick={()=>nav("trash")}><Trash2 size={17}/> Sampah</button>
    </nav>
    <div className="sideBottom"><div className="aiCard"><Sparkles size={16}/><div><b>AI Studio</b><small>Siap membantu cerita kamu.</small></div></div><AuthPanel/></div>
   </aside>
