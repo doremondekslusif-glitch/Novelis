@@ -228,10 +228,26 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis Story Intelligence.");
-   const nextRelationships=Array.isArray(data.relationships)?data.relationships as RelationshipMemory[]:relationships;
-   const nextTimeline=Array.isArray(data.timeline)?data.timeline as TimelineEvent[]:timeline;
-   const nextThreads=Array.isArray(data.threads)?data.threads as StoryThread[]:storyThreads;
-   const nextArcs=Array.isArray(data.arcs)?data.arcs as CharacterArc[]:characterArcs;
+   const mergeById=<T extends {id?:string}>(existing:T[],incoming:T[])=>{
+    const map=new Map(existing.map(item=>[String(item.id||JSON.stringify(item)),item]));
+    for(const item of incoming){
+     const key=String(item.id||JSON.stringify(item));
+     map.set(key,item);
+    }
+    return Array.from(map.values());
+   };
+   const mergeArcs=(existing:CharacterArc[],incoming:CharacterArc[])=>{
+    const map=new Map(existing.map(item=>[item.character.trim().toLowerCase(),item]));
+    for(const item of incoming){
+     const key=item.character.trim().toLowerCase();
+     if(key)map.set(key,item);
+    }
+    return Array.from(map.values());
+   };
+   const nextRelationships=Array.isArray(data.relationships)?mergeById(relationships,data.relationships as RelationshipMemory[]):relationships;
+   const nextTimeline=Array.isArray(data.timeline)?mergeById(timeline,data.timeline as TimelineEvent[]):timeline;
+   const nextThreads=Array.isArray(data.threads)?mergeById(storyThreads,data.threads as StoryThread[]):storyThreads;
+   const nextArcs=Array.isArray(data.arcs)?mergeArcs(characterArcs,data.arcs as CharacterArc[]):characterArcs;
    setRelationships(nextRelationships);setTimeline(nextTimeline);setStoryThreads(nextThreads);setCharacterArcs(nextArcs);
    onUpdate({...novel,relationshipsMemory:nextRelationships,timeline:nextTimeline,storyThreads:nextThreads,characterArcs:nextArcs,storyIntelligenceLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
    setNotice("Story Intelligence diperbarui");
