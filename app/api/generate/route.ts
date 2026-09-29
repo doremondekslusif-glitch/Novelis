@@ -6,6 +6,32 @@ export const maxDuration=60;
 
 const MODEL="gemini-3.8-flash";
 
+function classifyGeminiError(status:number,message:string,errorBody:any){
+ const raw=JSON.stringify(errorBody||"")+" "+message;
+ const lower=raw.toLowerCase();
+ if(status===401||status===403){
+  return {code:"API_KEY_ERROR",limitType:null,message:"API key Gemini bermasalah atau tidak diizinkan. Periksa GEMINI_API_KEY, project, dan akses API."};
+ }
+ if(status===404){
+  return {code:"MODEL_ERROR",limitType:null,message:"Model gemini-3.8-flash tidak ditemukan atau tidak tersedia untuk API key ini."};
+ }
+ if(status===429){
+  if(/requests?perday|requests?\s*\/\s*day|generate.*requests.*day|daily|per_day|perday/.test(lower)){
+   return {code:"DAILY_QUOTA",limitType:"daily_quota",message:"Daily quota Gemini habis untuk project/model ini. Tunggu sampai jendela kuota harian reset, lalu coba lagi."};
+  }
+  if(/requests?perminute|requests?\s*\/\s*minute|rpm|per_minute/.test(lower)){
+   return {code:"RPM_LIMIT",limitType:"rpm",message:"RPM limit Gemini tercapai. Tunggu sebentar sebelum mengirim request berikutnya."};
+  }
+  if(/input.*tokens?.*(minute|perminute)|output.*tokens?.*(minute|perminute)|tokens?.*perminute|tpm|token.*limit/.test(lower)){
+   return {code:"TPM_LIMIT",limitType:"tpm",message:"TPM limit Gemini tercapai. Request terlalu banyak token dalam jendela waktu ini. Tunggu sebentar lalu coba lagi."};
+  }
+  return {code:"RATE_LIMIT",limitType:"rate_limit",message:"Gemini menolak request karena rate limit/quota. Detail tidak cukup untuk membedakan daily quota, RPM, atau TPM."};
+ }
+ if(status===408) return {code:"TIMEOUT",limitType:null,message:"Permintaan ke Gemini terlalu lama. Coba lagi."};
+ if(status>=500) return {code:"GEMINI_SERVER_ERROR",limitType:null,message:"Server Gemini sedang mengalami masalah sementara. Coba lagi beberapa saat."};
+ return {code:"GEMINI_ERROR",limitType:null,message:"Gemini gagal memproses permintaan. Periksa detail error untuk diagnosis."};
+}
+
 export async function GET(){
  const apiKey=process.env.GEMINI_API_KEY;
  return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:MODEL});
@@ -146,18 +172,8 @@ export async function POST(request:Request){
   if(!response?.ok){
    const timeoutError=lastError==="Gemini terlalu lama merespons.";
    const status=timeoutError?504:geminiStatus===429?429:(geminiStatus>=500?503:502);
-   const error=timeoutError
-    ?"Gemini terlalu lama merespons. Coba lagi beberapa saat."
-    :geminiStatus===401||geminiStatus===403
-      ?"Gemini menolak API key. Periksa GEMINI_API_KEY di environment Vercel."
-      :geminiStatus===404
-        ?`Model ${MODEL} tidak ditemukan atau tidak tersedia untuk API key ini.`
-        :geminiStatus===429
-          ?"Batas penggunaan Gemini tercapai. Tunggu sebentar lalu coba lagi. Jika terus muncul, cek kuota/RPM/TPM project Gemini yang dipakai API key ini."
-          :geminiStatus===408
-            ?"Permintaan ke Gemini terlalu lama. Coba lagi."
-            :"Gemini gagal memproses permintaan.";
-   return NextResponse.json({error,detail:lastError,status:geminiStatus||null},{status});
+   const errorInfo=classifyGeminiError(geminiStatus,lastError,result?.error);
+   return NextResponse.json({error:errorInfo.message,code:errorInfo.code,limitType:errorInfo.limitType,detail:lastError,status:geminiStatus||null},{status});
   }
 
   const text=result?.candidates?.[0]?.content?.parts
