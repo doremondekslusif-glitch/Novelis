@@ -13,7 +13,10 @@
     "react": "latest",
     "react-dom": "latest",
     "@supabase/ssr": "latest",
-    "@supabase/supabase-js": "latest"
+    "@supabase/supabase-js": "latest",
+    "docx": "latest",
+    "jsPDF": "latest",
+    "jszip": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
