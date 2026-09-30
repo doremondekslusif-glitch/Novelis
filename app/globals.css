@@ -24,3 +24,55 @@
 .cardMenu button:hover{background:#f7f3ee}
 .cardMenu button.danger{color:#a24d4d}
 .cardMenu button.danger:hover{background:#fff1f1}
+
+
+/* Novel-scoped navigation + export UI */
+.sectionStudio{max-width:1180px;margin:0 auto;padding:18px 0 60px}
+.sectionIntro{margin:24px 0 28px}
+.sectionIntro.compact{margin-bottom:22px}
+.sectionIntro h2{font-family:Georgia,serif;font-size:34px;margin:12px 0 8px;color:#25212b}
+.sectionIntro p{color:#7c7480;max-width:760px;line-height:1.65;margin:0}
+.novelSelectorGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.novelSelector{display:flex;align-items:center;gap:15px;text-align:left;border:1px solid #e7e0e8;background:#fff;border-radius:16px;padding:18px;cursor:pointer;transition:.18s}
+.novelSelector:hover{border-color:#9a6cff;transform:translateY(-1px);box-shadow:0 10px 28px rgba(53,37,74,.08)}
+.novelSelector>div:nth-child(2){flex:1;display:flex;flex-direction:column;gap:4px}
+.novelSelector b{font-size:17px;color:#29242e}
+.novelSelector span{font-size:12px;color:#8b828e}
+.novelSelector small{font-size:12px;color:#6f55bd;margin-top:3px}
+.selectorIcon,.memoryAvatar{width:42px;height:42px;border-radius:12px;background:#f0eaff;color:#7650c8;display:grid;place-items:center;flex:none}
+.chapterDirectory{display:flex;flex-direction:column;gap:10px}
+.directoryRow{display:flex;align-items:center;justify-content:space-between;gap:18px;background:#fff;border:1px solid #e9e2e8;border-radius:14px;padding:16px 18px}
+.directoryRow>div{display:flex;flex-direction:column;gap:5px}
+.directoryRow b{color:#29242e}
+.directoryRow span{font-size:12px;color:#8a818c}
+.memoryDirectory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.memoryCard{display:flex;gap:14px;background:#fff;border:1px solid #e9e2e8;border-radius:15px;padding:18px}
+.memoryCard>div:last-child{min-width:0}
+.memoryCard b{display:block;font-size:16px;color:#29242e}
+.memoryCard span{display:block;font-size:12px;color:#7650c8;margin-top:4px}
+.memoryCard p{font-size:13px;color:#706874;line-height:1.55;margin:8px 0}
+.memoryCard small{font-size:11px;color:#99909a}
+.directoryEmpty{grid-column:1/-1;background:#faf8fb;border:1px dashed #d8cfe0;border-radius:14px;padding:28px;color:#827985;text-align:center;line-height:1.6}
+
+.exportWrap{position:relative}
+.exportIconBtn{display:inline-flex;align-items:center;gap:7px}
+.exportDropdown{position:absolute;right:0;top:calc(100% + 8px);width:270px;background:#fff;border:1px solid #e5dee7;border-radius:14px;box-shadow:0 18px 45px rgba(35,25,45,.15);padding:9px;z-index:30}
+.exportDropdown>b,.exportDropdown>span{display:block;padding:5px 9px}
+.exportDropdown>b{font-size:13px;color:#29242e}
+.exportDropdown>span{font-size:11px;color:#928a95;margin-bottom:5px}
+.exportDropdown button{width:100%;display:flex;align-items:center;gap:9px;border:0;background:transparent;border-radius:9px;padding:9px;color:#39313e;text-align:left;cursor:pointer;font-size:12px}
+.exportDropdown button:hover{background:#f5f1f7}
+.exportModal{width:min(650px,calc(100vw - 32px));background:#fff;border-radius:20px;padding:26px;box-shadow:0 24px 80px rgba(28,20,34,.24)}
+.exportGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:20px}
+.exportGrid button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;border:1px solid #e8e0ea;background:#fff;border-radius:14px;padding:17px;cursor:pointer;color:#302a35}
+.exportGrid button:hover{border-color:#9b6cff;background:#fbf9ff}
+.exportGrid button svg{color:#7650c8}
+.exportGrid b{font-size:15px}
+.exportGrid span{font-size:11px;color:#8b828d;line-height:1.45}
+.exportBusy{display:flex;align-items:center;gap:8px;margin-top:15px;font-size:12px;color:#7650c8}
+
+@media(max-width:900px){
+ .novelSelectorGrid,.memoryDirectory{grid-template-columns:1fr}
+ .directoryRow{align-items:flex-start;flex-direction:column}
+ .exportGrid{grid-template-columns:1fr}
+}
