@@ -105,7 +105,7 @@ async function exportNovelDocx(novel:Novel,chapters:Chapter[]){const safe=normal
 export default function Home(){
  const [novels,setNovels]=useState<Novel[]>(initialStarter),[page,setPage]=useState("projects"),[query,setQuery]=useState(""),[showCreate,setShowCreate]=useState(false),[selected,setSelected]=useState<Novel|null>(null),[hydrated,setHydrated]=useState(false),[storageStatus,setStorageStatus]=useState<StorageStatus>("idle"),[menuId,setMenuId]=useState<string|null>(null),[downloadPanelId,setDownloadPanelId]=useState<string|null>(null);
  const [title,setTitle]=useState(""),[genres,setGenres]=useState<string[]>(["Fantasy"]),[idea,setIdea]=useState("");
- useCloudSync(novels,setNovels,hydrated);
+ const {deleteNovelPermanently}=useCloudSync(novels,setNovels,hydrated);
 
  useEffect(()=>{try{
    const store=parseLocalStore(localStorage.getItem(STORAGE_KEY));
@@ -130,6 +130,19 @@ export default function Home(){
  const createNovel=()=>{const name=title.trim()||"Novel Tanpa Judul";const timestamp=nowIso();const n:Novel={id:createId("novel"),title:name,genre:genres.join(" • "),chapters:1,progress:0,updated:"Baru dibuat",createdAt:timestamp,updatedAt:timestamp,idea,builder:{...emptyBuilder,premise:idea},chapterList:[{id:createId("chapter1"),title:"Bab 1",content:"",status:"Draft"}]};setNovels(v=>[n,...v]);setShowCreate(false);setTitle("");setIdea("");setSelected(n);setPage("builder")};
  const nav=(p:string)=>{setSelected(null);setMenuId(null);setDownloadPanelId(null);setPage(p)};
  const renameNovel=(n:Novel)=>{const next=window.prompt("Nama novel:",n.title)?.trim();if(!next||next===n.title)return;updateNovel({...n,title:next});setMenuId(null)};
+ const deleteNovelPermanentlyFromDashboard=async(n:Novel)=>{
+  const confirmed=window.confirm("Hapus \""+n.title+"\" secara permanen?\\n\\nSemua bab, karakter, Story Memory, dan data novel ini akan dihapus dan tidak dapat dipulihkan.");
+  if(!confirmed)return;
+  try{
+   await deleteNovelPermanently(n.id);
+   if(selected?.id===n.id)setSelected(null);
+   setMenuId(null);
+   setDownloadPanelId(null);
+  }catch(error){
+   console.error("Novelis permanent delete failed",error);
+   alert("Novel belum dihapus karena penghapusan cloud gagal. Coba lagi setelah koneksi tersedia.");
+  }
+ };
 
  return <main className="shell">
   <aside className="sidebar">
@@ -149,7 +162,7 @@ export default function Home(){
     <><header><div><p className="eyebrow">WORKSPACE PENULIS</p><h1>{page==="projects"?"Selamat datang di Novelis.":page==="drafts"?"Draft & Bab":"Studio "+(page==="characters"?"Karakter":"Dunia Cerita")}</h1><p className="sub">{page==="projects"?"Bangun cerita, kembangkan karakter, dan biarkan AI membantu menulisnya.":selected?"Data dari novel yang dipilih.":"Pilih novel terlebih dahulu untuk melihat data yang tersimpan di dalamnya."}</p></div><div className="storageStatus">{storageStatus==="saving"?"Menyimpan otomatis…":storageStatus==="error"?"Penyimpanan lokal bermasalah":"✓ Tersimpan lokal"}</div><button className="primary" onClick={()=>setShowCreate(true)}><Sparkles size={17}/> Mulai Novel</button></header>
     {page==="projects"&&<><div className="hero"><div><span className="pill"><Sparkles size={14}/> AI Novel Studio</span><h2>Dari satu ide menjadi<br/><em>sebuah cerita utuh.</em></h2><p>Mulai dari premis sederhana. Novelis membantu membuat outline, karakter, dunia, hingga bab demi bab.</p><button className="heroBtn" onClick={()=>setShowCreate(true)}>Buat Novel Pertama <ChevronRight size={17}/></button></div><div className="heroArt"><div className="orb orb1"></div><div className="orb orb2"></div><div className="book"><BookOpen size={46}/><span>YOUR<br/>STORY</span></div></div></div>
     <div className="sectionHead"><div><h3>Novel Saya</h3><p>Kelola semua cerita yang sedang kamu kerjakan.</p></div><div className="search"><Search size={16}/><input placeholder="Cari novel..." value={query} onChange={e=>setQuery(e.target.value)}/></div></div>
-    <div className="cards">{novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase())).map(n=><div className="novelCard" key={n.id} onClick={()=>openNovel(n)}><div className="cover"><span>{n.title.split(" ").slice(0,2).join(" ")}</span><small>NOVELIS</small></div><div className="cardBody"><div className="cardTop"><div><h4>{n.title}</h4><p>{n.genre}</p></div><div className="cardMenuWrap"><button className="iconBtn" title="Menu novel" onClick={e=>{e.stopPropagation();setMenuId(menuId===n.id?null:n.id)}}><MoreHorizontal size={18}/></button>{menuId===n.id&&<div className="cardMenu" onClick={e=>e.stopPropagation()}><button onClick={()=>renameNovel(n)}>Ganti Nama</button><button onClick={()=>{setDownloadPanelId(n.id);setMenuId(null)}}>Unduh</button></div>}</div></div><div className="progressMeta"><span>{n.chapterList?.length||n.chapters} bab</span><span>{n.progress}%</span></div><div className="progress"><i style={{width:n.progress+"%"}}/></div><small className="updated">{n.updated}</small></div></div>)}<button className="emptyCard" onClick={()=>setShowCreate(true)}><div><Plus size={22}/></div><b>Buat novel baru</b><span>Mulai dari ide kamu</span></button></div></>}
+    <div className="cards">{novels.filter(n=>n.title.toLowerCase().includes(query.toLowerCase())).map(n=><div className="novelCard" key={n.id} onClick={()=>openNovel(n)}><div className="cover"><span>{n.title.split(" ").slice(0,2).join(" ")}</span><small>NOVELIS</small></div><div className="cardBody"><div className="cardTop"><div><h4>{n.title}</h4><p>{n.genre}</p></div><div className="cardMenuWrap"><button className="iconBtn" title="Menu novel" onClick={e=>{e.stopPropagation();setMenuId(menuId===n.id?null:n.id)}}><MoreHorizontal size={18}/></button>{menuId===n.id&&<div className="cardMenu" onClick={e=>e.stopPropagation()}><button onClick={()=>renameNovel(n)}>Ganti Nama</button><button onClick={()=>{setDownloadPanelId(n.id);setMenuId(null)}}>Unduh</button><button className="danger" onClick={()=>deleteNovelPermanentlyFromDashboard(n)}><Trash2 size={14}/> Hapus permanen</button></div>}</div></div><div className="progressMeta"><span>{n.chapterList?.length||n.chapters} bab</span><span>{n.progress}%</span></div><div className="progress"><i style={{width:n.progress+"%"}}/></div><small className="updated">{n.updated}</small></div></div>)}<button className="emptyCard" onClick={()=>setShowCreate(true)}><div><Plus size={22}/></div><b>Buat novel baru</b><span>Mulai dari ide kamu</span></button></div></>}
     {(page==="drafts"||page==="characters"||page==="world")&&<SectionStudio page={page as "drafts"|"characters"|"world"} novels={novels} selected={selected} onSelect={openSectionNovel} onBack={()=>setSelected(null)} onOpenNovel={openNovel}/>}</>
     }
   </section>
