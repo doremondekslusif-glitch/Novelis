@@ -133,14 +133,17 @@ export default function Home(){
  const deleteNovelPermanentlyFromDashboard=async(n:Novel)=>{
   const confirmed=window.confirm("Hapus \""+n.title+"\" secara permanen?\\n\\nSemua bab, karakter, Story Memory, dan data novel ini akan dihapus dan tidak dapat dipulihkan.");
   if(!confirmed)return;
+  const remaining=novels.filter(item=>item.id!==n.id);
+  setNovels(remaining);
+  if(selected?.id===n.id)setSelected(null);
+  setMenuId(null);
+  setDownloadPanelId(null);
+  const saved=writeLocalStore(remaining,page,null);
+  if(!saved)alert("Novel sudah dihapus dari tampilan, tetapi penyimpanan lokal gagal diperbarui. Muat ulang halaman dan periksa penyimpanan browser.");
   try{
    await deleteNovelPermanently(n.id);
-   if(selected?.id===n.id)setSelected(null);
-   setMenuId(null);
-   setDownloadPanelId(null);
   }catch(error){
-   console.error("Novelis permanent delete failed",error);
-   alert("Novel belum dihapus karena penghapusan cloud gagal. Coba lagi setelah koneksi tersedia.");
+   console.error("Novelis cloud delete sync failed",error);
   }
  };
 
