@@ -150,5 +150,24 @@ export function useCloudSync<T extends CloudNovel>(
     return()=>window.clearTimeout(timer);
   },[novels,cloudReady,enabled]);
 
-  return {cloudReady};
+  const deleteNovelPermanently=async(novelId:string)=>{
+    const supabase=supabaseRef.current;
+    if(enabled&&supabase&&hasSupabaseConfig){
+      const {data:{user},error:userError}=await supabase.auth.getUser();
+      if(userError)throw userError;
+      if(user){
+        const {error}=await supabase
+          .from("novels")
+          .delete()
+          .eq("user_id",user.id)
+          .eq("novel_id",novelId);
+        if(error)throw error;
+      }
+    }
+    setNovels(current=>current.filter(n=>n.id!==novelId));
+    novelsRef.current=novelsRef.current.filter(n=>n.id!==novelId);
+    lastUploadRef.current="";
+  };
+
+  return {cloudReady,deleteNovelPermanently};
 }
