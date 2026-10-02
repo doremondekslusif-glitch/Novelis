@@ -154,8 +154,10 @@ export async function POST(request:Request){
 
     geminiStatus=response.status;
     lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
-    const apiErrorCode=String(result?.error?.status||result?.error?.code||"").toLowerCase();
-    const retryable=response.status===503||response.status===408||(response.status===429&&!apiErrorCode.includes("quota"));
+    // Jangan otomatis mengulang 429. Rate-limit/quota errors adalah kondisi
+    // yang tidak akan pulih hanya dengan request kedua dan retry justru bisa
+    // menambah konsumsi kuota. Retry hanya untuk gangguan sementara 408/503.
+    const retryable=response.status===503||response.status===408;
     if(retryable&&attempt<1){
      const retryAfter=Number(response.headers.get("retry-after")||0);
      const delay=retryAfter>0?Math.min(retryAfter*1000,8000):2000;
