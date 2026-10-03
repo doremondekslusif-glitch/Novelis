@@ -62,7 +62,7 @@ export async function POST(request:Request){
 
   const instructions:Record<Action,string>={
    generate:"Mulai Bab 1 dari awal. Tulis bab yang panjang, natural, imersif, dan kaya adegan. Targetkan sekitar 1200-1800 kata.",
-   continue:"Lanjutkan cerita dari konteks terakhir yang diberikan. Jangan mengulang teks sebelumnya. Pastikan pembuka bab menyambung secara alami dengan kejadian bab sebelumnya. Targetkan sekitar 1200-1800 kata.",
+   continue:"Lanjutkan cerita tepat setelah AKHIR bab sebelumnya. Jangan mengulang adegan, dialog, tindakan, informasi, atau kejadian yang sudah terjadi. Bagian akhir bab sebelumnya adalah TITIK MULAI cerita ini. Jika bab sebelumnya berakhir saat tokoh sedang berada di suatu tempat, melakukan sesuatu, atau baru mengetahui sesuatu, mulai dari keadaan terakhir tersebut dan bergerak maju. Jangan kembali ke awal bab sebelumnya hanya untuk menjelaskan ulang. Gunakan ringkasan untuk memahami keseluruhan bab dan KONTEKS AKHIR untuk menentukan posisi cerita yang sebenarnya. Targetkan sekitar 1200-1800 kata.",
    improve:"Perbaiki teks bab yang diberikan. Pertahankan inti cerita, fakta, karakter, urutan kejadian, dan gaya penulisannya. Perbaiki kalimat, alur, transisi, dialog, dan konsistensi tanpa mengubah maksud cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    dialog:"Perkaya bagian yang diberikan dengan dialog yang natural dan sesuai karakter. Pertahankan kejadian utama dan jangan mengubah inti cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
@@ -74,7 +74,11 @@ export async function POST(request:Request){
   };
 
   const currentText=clip(chapter.content,12000);
-  const previousText=clip(previousChapter?.content,6000);
+  const previousFullText=String(previousChapter?.content||"").trim();
+  // Untuk kontinuitas, bagian akhir bab lebih penting daripada bagian awal.
+  // Ambil hingga 8000 karakter terakhir agar titik berhenti cerita tetap masuk konteks.
+  const previousText=previousFullText.length>8000?previousFullText.slice(-8000):previousFullText;
+  const previousEnding=previousText;
   const summaries=clip(chapterSummaries,7000);
   const storyMemory=clip(memory,7000);
 
@@ -122,7 +126,9 @@ export async function POST(request:Request){
    "",
    "BAB: "+(chapter.number||1),
    "JUDUL BAB: "+(chapter.title||"Bab tanpa judul"),
-   action!=="memory" && previousText ? "KONTEKS AKHIR BAB SEBELUMNYA:\n"+previousText : "",
+   action==="continue" && previousEnding ? "KONTEKS AKHIR BAB SEBELUMNYA — TITIK MULAI WAJIB:\n"+previousEnding : "",
+   action==="continue" && previousFullText ? "ATURAN KONTINUITAS: Bab baru WAJIB bergerak maju dari kalimat/kejadian terakhir di konteks di atas. Jangan menulis ulang bagian awal bab sebelumnya, jangan mengulang adegan yang sama dengan kata-kata berbeda, dan jangan memulai kembali dari titik waktu yang lebih awal. Ringkasan bab terdahulu adalah konteks historis, sedangkan bagian akhir bab sebelumnya adalah titik mulai aktual." : "",
+   action==="qualityControl" && previousEnding ? "KONTEKS AKHIR BAB SEBELUMNYA:\n"+previousEnding : "",
    currentText ? "TEKS BAB SEKARANG:\n"+currentText : ""
   ].filter(Boolean).join("\n\n");
 
