@@ -20,7 +20,7 @@ type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"charact
 type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string};
 type MemoryStatus="green"|"yellow"|"red";
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
-type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;deletedAt?:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];factMemory?:FactMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
+type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;cloudVersion?:number;deletedAt?:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];factMemory?:FactMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
 
 const starter:Partial<Novel>[]=[
  {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
@@ -36,6 +36,24 @@ const PAGE_KEY="novelis:page";
 const SELECTED_KEY="novelis:selected";
 
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
+function normalizeFactText(value:any){return String(value??"").toLowerCase().replace(/[^a-z0-9\\u00C0-\\u024F]+/gi," ").trim();}
+function factTokens(value:any){return Array.from(new Set(normalizeFactText(value).split(/\\s+/).filter(v=>v.length>=3)));}
+function factOverlap(a:any,b:any){const aa=factTokens(a);const bb=new Set(factTokens(b));if(!aa.length||!bb.size)return 0;return aa.filter(v=>bb.has(v)).length/aa.length;}
+function resolveReplacementFactId(incoming:any,facts:FactMemory[]){
+ const direct=typeof incoming?.replacesId==="string"?incoming.replacesId.trim():"";
+ if(direct&&facts.some(f=>f.id===direct))return direct;
+ const subject=normalizeFactText(incoming?.replacesSubjectName);
+ const oldStatement=String(incoming?.replacesStatement||"").trim();
+ if(subject&&oldStatement){
+  const candidates=facts.filter(f=>f.status!=="superseded"&&normalizeFactText(f.subjectName)===subject).map(f=>({f,score:factOverlap(oldStatement,f.statement)})).sort((a,b)=>b.score-a.score);
+  if(candidates.length&&candidates[0].score>=0.5&&(!candidates[1]||candidates[0].score-candidates[1].score>=0.08))return candidates[0].f.id;
+ }
+ if(subject){
+  const candidates=facts.filter(f=>f.status!=="superseded"&&normalizeFactText(f.subjectName)===subject);
+  if(candidates.length===1)return candidates[0].id;
+ }
+ return "";
+}
 function nowIso(){return new Date().toISOString();}
 function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMemory[]=[],entities:EntityMemory[]=[],limit=30){
  const active=facts.filter(f=>f.status!=="superseded");
@@ -388,7 +406,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    for(const incoming of incomingFacts){
     const statement=String(incoming?.statement||"").trim();
     if(!statement)continue;
-    const replacesId=typeof incoming?.replacesId==="string"?incoming.replacesId:undefined;
+    const replacesId=resolveReplacementFactId(incoming,factMemory);
     if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
     const existing=incoming?.id?factMap.get(String(incoming.id)):undefined;
     const id=existing?.id||String(incoming?.id||createId("fact"));
