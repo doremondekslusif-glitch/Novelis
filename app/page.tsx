@@ -18,10 +18,10 @@ type TimelineEvent={id:string;chapter:number;title:string;description:string;cha
 type StoryThread={id:string;title:string;description:string;status:"open"|"resolved"|"uncertain";lastChapter?:number;relatedCharacters?:string[]};
 type CharacterArc={character:string;arc:string;currentState?:string;turningPoints?:string[];lastChapter?:number};
 type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"character"|"timeline"|"world"|"plot"|"style";title:string;evidence:string;suggestion:string};
-type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string};
+type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string;checkedVersion:string};
 type MemoryStatus=EngineMemoryStatus;
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
-type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;cloudVersion?:number;deletedAt?:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];factMemory?:FactMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
+type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;cloudVersion?:number;deletedAt?:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];factMemory?:FactMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;qualityReport?:QualityReport;chapterList?:Chapter[]};
 
 const starter:Partial<Novel>[]=[
  {title:"The Last Aurora",genre:"Fantasy • Adventure",chapters:12,progress:68,updated:"Baru saja",builder:{premise:"",theme:"",tone:"",style:"",pointOfView:"third_limited",audience:"umum",length:"sedang",chapterTarget:"30",ending:"not_set",aiFreedom:"co_writer",locked:[],characters:"",world:"",outline:""},chapterList:Array.from({length:12},(_,i)=>({id:String(i+1),title:`Bab ${i+1}`,content:"",status:"Draft" as const}))},
@@ -256,7 +256,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [summaryBusy,setSummaryBusy]=useState(false);
  const [intelligenceBusy,setIntelligenceBusy]=useState(false);
  const [qualityBusy,setQualityBusy]=useState(false);
- const [qualityReport,setQualityReport]=useState<QualityReport|null>(null);
+ const [qualityReport,setQualityReport]=useState<QualityReport|null>(novel.qualityReport||null);
  const [focusMode,setFocusMode]=useState(false);
  const [wordGoal,setWordGoal]=useState(1000);
  const aiRequestSeq=useRef(0);
@@ -273,11 +273,13 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const chapterSummaries=chapters.map((c,i)=>({chapterNumber:i+1,chapter:c})).filter(item=>item.chapter.summary?.trim()).map(item=>`Bab ${item.chapterNumber} — ${item.chapter.title}: ${item.chapter.summary}`).join("\n");
  const relevantFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,30);
  const qualityFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,60);
+ const qualityVersion=`${activeId}:${title}:${text.length}:${text.slice(-120)}`;
+ const displayQualityReport=qualityReport&&qualityReport.checkedChapter===chapterNumber&&qualityReport.checkedVersion===qualityVersion?qualityReport:null;
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
  const persistChapter=(updatedChapters:Chapter[],nextMemory=memory,extra:Partial<Novel>={})=>{
-  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
+  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,qualityReport,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
  };
 
  const wordCount=text.trim()?text.trim().split(/\s+/).length:0;
@@ -456,7 +458,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Quality Control dibatalkan karena naskah sudah berubah. Silakan jalankan pemeriksaan kembali.");
    const issues=Array.isArray(data.issues)?data.issues as QualityIssue[]:[];
    const report:QualityReport={overall:data.overall==="clear"?"clear":"review",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID")};
-   setQualityReport(report);setNotice(issues.length?"Quality Control menemukan "+issues.length+" hal untuk ditinjau":"Quality Control: tidak menemukan masalah penting");
+   setQualityReport(report);
+   onUpdate({...novel,qualityReport:report,chapterList:chapters,chapters:chapters.length,updatedAt:nowIso(),updated:"Baru saja"});
+   setNotice(issues.length?"Quality Control menemukan "+issues.length+" hal untuk ditinjau":"Quality Control: tidak menemukan masalah penting");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menjalankan Quality Control.")}finally{setQualityBusy(false)}
  };
 
@@ -506,8 +510,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
      <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"} • {characterMemories.length} karakter • {entityMemories.length} entitas • {factMemory.length} fakta</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
     </div>
     <div className="intelligenceBar"><div><b>Story Intelligence</b><span>{novel.storyIntelligenceLastAnalyzedChapter===chapterNumber?"Hubungan, timeline, benang cerita, dan arc karakter sudah dianalisis untuk bab ini.":"Analisis perkembangan cerita untuk menjaga kesinambungan antar-bab."}</span></div><button className="secondary mini" onClick={runIntelligence} disabled={intelligenceBusy||!text.trim()}>{intelligenceBusy?<><Loader2 size={13} className="spin"/> Menganalisis...</>:<><Sparkles size={13}/> Analisis Story Intelligence</>}</button></div>
-    <div className="qualityBar"><div><b>Quality Control</b><span>{qualityReport?qualityReport.overall==="clear"?"Bab "+chapterNumber+": tidak ditemukan masalah penting.":"Bab "+chapterNumber+": "+qualityReport.issues.length+" hal perlu ditinjau.":"Periksa kontinuitas, karakter, timeline, dunia, plot, dan gaya sebelum melanjutkan bab berikutnya."}</span></div><button className="secondary mini" onClick={runQualityCheck} disabled={qualityBusy||!text.trim()}>{qualityBusy?<><Loader2 size={13} className="spin"/> Memeriksa...</>:<><Check size={13}/> Periksa Bab</>}</button></div>
-    {qualityReport&&<div className="qualityReport">{qualityReport.issues.length===0?<div className="qualityClear"><Check size={15}/><span>Tidak ada masalah penting yang terdeteksi pada pemeriksaan ini.</span></div>:qualityReport.issues.map((issue,i)=><div className="qualityIssue" key={issue.title+"-"+i}><div className={"severity "+issue.severity}>{issue.severity==="high"?"TINGGI":issue.severity==="medium"?"SEDANG":"RENDAH"}</div><div><b>{issue.title}</b><p>{issue.evidence}</p><small>Saran: {issue.suggestion}</small></div></div>)}</div>}
+    <div className="qualityBar"><div><b>Quality Control</b><span>{displayQualityReport?displayQualityReport.overall==="clear"?"Bab "+chapterNumber+": tidak ditemukan masalah penting.":"Bab "+chapterNumber+": "+displayQualityReport.issues.length+" hal perlu ditinjau.":"Periksa kontinuitas, karakter, timeline, dunia, plot, dan gaya sebelum melanjutkan bab berikutnya."}</span></div><button className="secondary mini" onClick={runQualityCheck} disabled={qualityBusy||!text.trim()}>{qualityBusy?<><Loader2 size={13} className="spin"/> Memeriksa...</>:<><Check size={13}/> Periksa Bab</>}</button></div>
+    {displayQualityReport&&<div className="qualityReport">{displayQualityReport.issues.length===0?<div className="qualityClear"><Check size={15}/><span>Tidak ada masalah penting yang terdeteksi pada pemeriksaan ini.</span></div>:displayQualityReport.issues.map((issue,i)=><div className="qualityIssue" key={issue.title+"-"+i}><div className={"severity "+issue.severity}>{issue.severity==="high"?"TINGGI":issue.severity==="medium"?"SEDANG":"RENDAH"}</div><div><b>{issue.title}</b><p>{issue.evidence}</p><small>Saran: {issue.suggestion}</small></div></div>)}</div>}
     <div className="summaryBar"><div><b>Ringkasan & Memory Foundation</b><span>{active?.summary?.trim()?`Bab ${chapterNumber} sudah dianalisis. ${memoryNeedsUpdate?"Ada perkembangan yang perlu dipertimbangkan untuk Story Memory.":"Memory Foundation tetap selaras."}`:"Ringkas Bab untuk mencatat kejadian dan memperbarui memori karakter/entitas."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas & Analisis</>}</button></div>
     <div className="aiToolbar">
      <button onClick={()=>runAI("improve")} disabled={generating||!text.trim()}><WandSparkles size={15}/> Perbaiki</button>
