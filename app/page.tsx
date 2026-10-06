@@ -457,7 +457,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menjalankan Quality Control.");
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Quality Control dibatalkan karena naskah sudah berubah. Silakan jalankan pemeriksaan kembali.");
    const issues=Array.isArray(data.issues)?data.issues as QualityIssue[]:[];
-   const report:QualityReport={overall:data.overall==="clear"?"clear":"review",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID")};
+   const report:QualityReport={overall:data.overall==="clear"?"clear":"review",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID"),checkedVersion:qualityVersion};
    setQualityReport(report);
    onUpdate({...novel,qualityReport:report,chapterList:chapters,chapters:chapters.length,updatedAt:nowIso(),updated:"Baru saja"});
    setNotice(issues.length?"Quality Control menemukan "+issues.length+" hal untuk ditinjau":"Quality Control: tidak menemukan masalah penting");
