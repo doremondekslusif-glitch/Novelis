@@ -380,8 +380,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null,
    chapters:chapters.map((ch,i)=>({id:ch.id,number:i+1,title:ch.title,summary:ch.summary||""}))
   };
-  const makeRequest=async(action:string)=>{
-   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase,action,requestId:"req_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8)+"_"+action})});
+  const makeRequest=async(action:string,base=requestBase)=>{
+   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...base,action,requestId:"req_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8)+"_"+action})});
    const data=await res.json();
    if(!res.ok)throw new Error(data.error||"Gagal menjalankan "+action+".");
    return data;
@@ -389,7 +389,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setAnalysisBusy(true);setSummaryBusy(true);setIntelligenceBusy(true);setQualityBusy(true);
   setGenerateError("");setNotice("");
   try{
-   const [memoryData,intelligenceData,qualityData]=await Promise.all([makeRequest("memoryFoundation"),makeRequest("storyIntelligence"),makeRequest("qualityControl")]);
+   const [memoryData,intelligenceData]=await Promise.all([makeRequest("memoryFoundation"),makeRequest("storyIntelligence")]);
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Analisis lengkap dibatalkan karena naskah berubah selama pemeriksaan. Jalankan Analisis Lengkap kembali.");
    const updatedChapters:Chapter[]=chapters.map(ch=>ch.id===activeId?{...ch,title:title.trim()||"Bab "+chapterNumber,content:text,status:(text.trim().length>80?"Selesai":"Draft") as Chapter["status"],summary:String(memoryData.summary||"").trim()}:ch);
    const mergedMemory=mergeMemoryFoundation({
@@ -406,6 +406,21 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     incomingThreads:Array.isArray(intelligenceData.threads)?intelligenceData.threads as StoryThread[]:[],
     incomingArcs:Array.isArray(intelligenceData.arcs)?intelligenceData.arcs as CharacterArc[]:[]
    });
+   const qualityBase={
+    ...requestBase,
+    novel:{
+     ...requestBase.novel,
+     memory:mergedMemory.storyMemory,
+     charactersMemory:mergedMemory.characters,
+     entitiesMemory:mergedMemory.entities,
+     factMemory:mergedMemory.facts,
+     relationshipsMemory:mergedIntelligence.relationships,
+     timeline:mergedIntelligence.timeline,
+     storyThreads:mergedIntelligence.threads,
+     characterArcs:mergedIntelligence.arcs
+    }
+   };
+   const qualityData=await makeRequest("qualityControl",qualityBase);
    const allowedSeverities=new Set<QualityIssue["severity"]>(["high","medium","low"]);
    const allowedCategories=new Set<QualityIssue["category"]>(["continuity","character","timeline","world","plot","style"]);
    const issues:QualityIssue[]=Array.isArray(qualityData.issues)?qualityData.issues.filter((item:any)=>item&&typeof item==="object").map((item:any)=>({severity:allowedSeverities.has(item.severity)?item.severity:"low",category:allowedCategories.has(item.category)?item.category:"continuity",title:String(item.title||"").trim().slice(0,300),evidence:String(item.evidence||"").trim().slice(0,1200),suggestion:String(item.suggestion||"").trim().slice(0,1200)})).filter((item:QualityIssue)=>Boolean(item.title&&item.evidence&&item.suggestion)).slice(0,8):[];
