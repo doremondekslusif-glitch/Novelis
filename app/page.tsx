@@ -41,17 +41,22 @@ function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMem
  const active=facts.filter(f=>f.status!=="superseded");
  if(!active.length)return [];
  const hay=String(text||"").toLowerCase();
- const terms=[...characters.map(c=>c.name),...entities.map(e=>e.name)].map(v=>String(v||"").trim().toLowerCase()).filter(v=>v.length>=2);
- return active.map((fact,index)=>{
+ const terms=[...characters.map(c=>c.name),...entities.map(e=>e.name)]
+  .map(v=>String(v||"").trim().toLowerCase()).filter(v=>v.length>=2);
+ const maxChapter=Math.max(1,...active.map(f=>Number(f.lastChapter)||0));
+ return active.map(fact=>{
   const subject=String(fact.subjectName||"").trim().toLowerCase();
   const statement=String(fact.statement||"").toLowerCase();
-  let score=Math.max(0,5-index*0.01);
+  let score=Number(fact.lastChapter)>0?Math.min(3,(Number(fact.lastChapter)/maxChapter)*3):0;
   if(subject&&hay.includes(subject))score+=10;
+  if(statement&&hay.length>=3&&statement.includes(hay.slice(0,Math.min(hay.length,80))))score+=2;
   for(const term of terms){
+   const mentioned=hay.includes(term);
    if(subject===term)score+=6;
    else if(subject&&subject.includes(term))score+=3;
-   if(hay.includes(term)&&statement.includes(term))score+=4;
+   if(mentioned&&statement.includes(term))score+=4;
   }
+  if(fact.status==="uncertain")score-=1;
   return {fact,score};
  }).sort((a,b)=>b.score-a.score).slice(0,limit).map(x=>x.fact);
 }
