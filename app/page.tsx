@@ -263,6 +263,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [summaryBusy,setSummaryBusy]=useState(false);
  const [intelligenceBusy,setIntelligenceBusy]=useState(false);
  const [qualityBusy,setQualityBusy]=useState(false);
+ const [analysisBusy,setAnalysisBusy]=useState(false);
  const [qualityReport,setQualityReport]=useState<QualityReport|null>(()=>novel.qualityReport||null);
  const [focusMode,setFocusMode]=useState(false);
  const [wordGoal,setWordGoal]=useState(1000);
@@ -365,6 +366,60 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    else setText(generated);
    setDirty(true);setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":action==="description"?"Deskripsi diperkaya":"Cerita berhasil dibuat");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal memproses tulisan.")}finally{setGenerating(false)}
+ };
+
+ const runFullAnalysis=async()=>{
+  if(analysisBusy||!text.trim())return;
+  const aiToken=++aiRequestSeq.current;
+  const snapshot={activeId,title,text};
+  const chapterVersion=await contentHash(activeId,title,text);
+  const requestBase={
+   novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
+   chapter:{id:activeId,title:title.trim()||"Bab "+chapterNumber,content:text,number:chapterNumber},
+   chapterId:activeId,chapterVersion,
+   previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null,
+   chapters:chapters.map((ch,i)=>({id:ch.id,number:i+1,title:ch.title,summary:ch.summary||""}))
+  };
+  const makeRequest=async(action:string)=>{
+   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...requestBase,action,requestId:"req_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8)+"_"+action})});
+   const data=await res.json();
+   if(!res.ok)throw new Error(data.error||"Gagal menjalankan "+action+".");
+   return data;
+  };
+  setAnalysisBusy(true);setSummaryBusy(true);setIntelligenceBusy(true);setQualityBusy(true);
+  setGenerateError("");setNotice("");
+  try{
+   const [memoryData,intelligenceData,qualityData]=await Promise.all([makeRequest("memoryFoundation"),makeRequest("storyIntelligence"),makeRequest("qualityControl")]);
+   if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Analisis lengkap dibatalkan karena naskah berubah selama pemeriksaan. Jalankan Analisis Lengkap kembali.");
+   const updatedChapters:Chapter[]=chapters.map(ch=>ch.id===activeId?{...ch,title:title.trim()||"Bab "+chapterNumber,content:text,status:(text.trim().length>80?"Selesai":"Draft") as Chapter["status"],summary:String(memoryData.summary||"").trim()}:ch);
+   const mergedMemory=mergeMemoryFoundation({
+    existingCharacters:characterMemories,existingEntities:entityMemories,existingFacts:factMemory,
+    incomingCharacters:Array.isArray(memoryData.characters)?memoryData.characters as CharacterMemory[]:[],
+    incomingEntities:Array.isArray(memoryData.entities)?memoryData.entities as EntityMemory[]:[],
+    incomingFacts:Array.isArray(memoryData.facts)?memoryData.facts as FactMemory[]:[],
+    chapterNumber,storyMemory:String(memoryData.storyMemory||memory).trim(),memoryStatus:memoryData.memoryStatus
+   });
+   const mergedIntelligence=mergeStoryIntelligence({
+    existingRelationships:relationships,existingTimeline:timeline,existingThreads:storyThreads,existingArcs:characterArcs,
+    incomingRelationships:Array.isArray(intelligenceData.relationships)?intelligenceData.relationships as RelationshipMemory[]:[],
+    incomingTimeline:Array.isArray(intelligenceData.timeline)?intelligenceData.timeline as TimelineEvent[]:[],
+    incomingThreads:Array.isArray(intelligenceData.threads)?intelligenceData.threads as StoryThread[]:[],
+    incomingArcs:Array.isArray(intelligenceData.arcs)?intelligenceData.arcs as CharacterArc[]:[]
+   });
+   const allowedSeverities=new Set<QualityIssue["severity"]>(["high","medium","low"]);
+   const allowedCategories=new Set<QualityIssue["category"]>(["continuity","character","timeline","world","plot","style"]);
+   const issues:QualityIssue[]=Array.isArray(qualityData.issues)?qualityData.issues.filter((item:any)=>item&&typeof item==="object").map((item:any)=>({severity:allowedSeverities.has(item.severity)?item.severity:"low",category:allowedCategories.has(item.category)?item.category:"continuity",title:String(item.title||"").trim().slice(0,300),evidence:String(item.evidence||"").trim().slice(0,1200),suggestion:String(item.suggestion||"").trim().slice(0,1200)})).filter((item:QualityIssue)=>Boolean(item.title&&item.evidence&&item.suggestion)).slice(0,8):[];
+   const report:QualityReport={overall:issues.some(item=>item.severity==="high"||item.severity==="medium")?"review":"clear",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID"),checkedVersion:chapterVersion};
+   const nextMemory=mergedMemory.storyMemory,nextCharacters=mergedMemory.characters,nextEntities=mergedMemory.entities,nextFacts=mergedMemory.facts,nextStatus=mergedMemory.memoryStatus,nextNeedsUpdate=mergedMemory.memoryNeedsUpdate;
+   const nextRelationships=mergedIntelligence.relationships,nextTimeline=mergedIntelligence.timeline,nextThreads=mergedIntelligence.threads,nextArcs=mergedIntelligence.arcs;
+   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setFactMemory(nextFacts);setMemory(nextMemory);setMemoryNeedsUpdate(nextNeedsUpdate);setMemoryStatus(nextStatus);setMemoryStatusChapter(chapterNumber);
+   setRelationships(nextRelationships);setTimeline(nextTimeline);setStoryThreads(nextThreads);setCharacterArcs(nextArcs);setQualityReport(report);setDirty(false);
+   onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,factMemory:nextFacts,relationshipsMemory:nextRelationships,timeline:nextTimeline,storyThreads:nextThreads,characterArcs:nextArcs,memoryNeedsUpdate:nextNeedsUpdate,memoryStatus:nextStatus,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,storyIntelligenceLastAnalyzedChapter:chapterNumber,qualityReport:report,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(ch=>ch.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja"});
+   const statusLabel=nextStatus==="green"?"hijau":nextStatus==="yellow"?"kuning":"merah";
+   const qcLabel=issues.length?"QC menemukan "+issues.length+" hal untuk ditinjau":"QC tidak menemukan masalah penting";
+   setNotice("Analisis Lengkap selesai • Memory "+statusLabel+" • Story Intelligence diperbarui • "+qcLabel+(mergedMemory.unresolvedReplacement?" • ada replacement fact yang belum dapat dipetakan dengan aman":""));
+  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menjalankan Analisis Lengkap.");}
+  finally{setAnalysisBusy(false);setSummaryBusy(false);setIntelligenceBusy(false);setQualityBusy(false);}
  };
 
  const runSummary=async()=>{
@@ -534,10 +589,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
      <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Update Story Memory” untuk membuatnya, atau tulis sendiri."/>
      <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"} • {characterMemories.length} karakter • {entityMemories.length} entitas • {factMemory.length} fakta</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
     </div>
-    <div className="intelligenceBar"><div><b>Story Intelligence</b><span>{novel.storyIntelligenceLastAnalyzedChapter===chapterNumber?"Hubungan, timeline, benang cerita, dan arc karakter sudah dianalisis untuk bab ini.":"Analisis perkembangan cerita untuk menjaga kesinambungan antar-bab."}</span></div><button className="secondary mini" onClick={runIntelligence} disabled={intelligenceBusy||!text.trim()}>{intelligenceBusy?<><Loader2 size={13} className="spin"/> Menganalisis...</>:<><Sparkles size={13}/> Analisis Story Intelligence</>}</button></div>
-    <div className="qualityBar"><div><b>Quality Control</b><span>{displayQualityReport?displayQualityReport.overall==="clear"?"Bab "+chapterNumber+": tidak ditemukan masalah penting.":"Bab "+chapterNumber+": "+displayQualityReport.issues.length+" hal perlu ditinjau.":"Periksa kontinuitas, karakter, timeline, dunia, plot, dan gaya sebelum melanjutkan bab berikutnya."}</span></div><button className="secondary mini" onClick={runQualityCheck} disabled={qualityBusy||!text.trim()}>{qualityBusy?<><Loader2 size={13} className="spin"/> Memeriksa...</>:<><Check size={13}/> Periksa Bab</>}</button></div>
+    <div className="intelligenceBar"><div><b>Story Intelligence</b><span>{novel.storyIntelligenceLastAnalyzedChapter===chapterNumber?"Hubungan, timeline, benang cerita, dan arc karakter sudah dianalisis untuk bab ini.":"Analisis perkembangan cerita untuk menjaga kesinambungan antar-bab."}</span></div><button className="secondary mini" onClick={runIntelligence} disabled={analysisBusy||intelligenceBusy||!text.trim()}>{intelligenceBusy?<><Loader2 size={13} className="spin"/> Menganalisis...</>:<><Sparkles size={13}/> Analisis Story Intelligence</>}</button></div>
+    <div className="qualityBar"><div><b>Quality Control</b><span>{displayQualityReport?displayQualityReport.overall==="clear"?"Bab "+chapterNumber+": tidak ditemukan masalah penting.":"Bab "+chapterNumber+": "+displayQualityReport.issues.length+" hal perlu ditinjau.":"Periksa kontinuitas, karakter, timeline, dunia, plot, dan gaya sebelum melanjutkan bab berikutnya."}</span></div><button className="secondary mini" onClick={runQualityCheck} disabled={analysisBusy||qualityBusy||!text.trim()}>{qualityBusy?<><Loader2 size={13} className="spin"/> Memeriksa...</>:<><Check size={13}/> Periksa Bab</>}</button></div>
     {displayQualityReport&&<div className="qualityReport">{displayQualityReport.issues.length===0?<div className="qualityClear"><Check size={15}/><span>Tidak ada masalah penting yang terdeteksi pada pemeriksaan ini.</span></div>:displayQualityReport.issues.map((issue,i)=><div className="qualityIssue" key={issue.title+"-"+i}><div className={"severity "+issue.severity}>{issue.severity==="high"?"TINGGI":issue.severity==="medium"?"SEDANG":"RENDAH"}</div><div><b>{issue.title}</b><p>{issue.evidence}</p><small>Saran: {issue.suggestion}</small></div></div>)}</div>}
-    <div className="summaryBar"><div><b>Ringkasan & Memory Foundation</b><span>{active?.summary?.trim()?`Bab ${chapterNumber} sudah dianalisis. ${memoryNeedsUpdate?"Ada perkembangan yang perlu dipertimbangkan untuk Story Memory.":"Memory Foundation tetap selaras."}`:"Ringkas Bab untuk mencatat kejadian dan memperbarui memori karakter/entitas."}</span></div><button className="secondary mini" onClick={runSummary} disabled={summaryBusy||!text.trim()}>{summaryBusy?<><Loader2 size={13} className="spin"/> Merangkum...</>:<><FileText size={13}/> Ringkas & Analisis</>}</button></div>
+    <div className="summaryBar"><div><b>Ringkasan & Memory Foundation</b><span>{active?.summary?.trim()?(("Bab "+chapterNumber+" sudah dianalisis. "+(memoryNeedsUpdate?"Ada perkembangan yang perlu dipertimbangkan untuk Story Memory.":"Memory, Story Intelligence, dan QC tersinkron.")):"Analisis Lengkap menjalankan Ringkasan + Memory Foundation, Story Intelligence, dan Quality Control pada snapshot bab yang sama.")}</span></div><button className="secondary mini" onClick={runFullAnalysis} disabled={analysisBusy||summaryBusy||!text.trim()}>{analysisBusy?<><Loader2 size={13} className="spin"/> Menganalisis semua...</>:<><Sparkles size={13}/> Analisis Lengkap</>}</button></div>
     <div className="aiToolbar">
      <button onClick={()=>runAI("improve")} disabled={generating||!text.trim()}><WandSparkles size={15}/> Perbaiki</button>
      <button onClick={()=>runAI("dialog")} disabled={generating||!text.trim()}><MessageCircle size={15}/> Dialog</button>
