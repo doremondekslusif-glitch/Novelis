@@ -11,7 +11,7 @@ import {Document,Packer,Paragraph,HeadingLevel} from "docx";
 type Chapter={id:string;title:string;content:string;status:"Draft"|"Selesai";summary?:string};
 type CharacterMemory={id:string;name:string;role?:string;description?:string;facts?:string[];status?:string;firstChapter?:number;lastChapter?:number};
 type EntityMemory={id:string;name:string;type:"location"|"object"|"organization"|"other";description?:string;facts?:string[];firstChapter?:number;lastChapter?:number};
-type FactMemory={id:string;subjectId?:string;subjectType:"character"|"entity"|"relationship"|"world"|"plot";subjectName?:string;statement:string;status:"active"|"superseded"|"uncertain";firstChapter?:number;lastChapter?:number};
+type FactMemory={id:string;subjectId?:string;subjectType:"character"|"entity"|"relationship"|"world"|"plot";subjectName?:string;statement:string;status:"active"|"superseded"|"uncertain";firstChapter?:number;lastChapter?:number;replacesId?:string};
 type RelationshipMemory={id:string;from:string;to:string;type?:string;status?:string;facts?:string[];lastChapter?:number};
 type TimelineEvent={id:string;chapter:number;title:string;description:string;characters?:string[];importance?:string};
 type StoryThread={id:string;title:string;description:string;status:"open"|"resolved"|"uncertain";lastChapter?:number;relatedCharacters?:string[]};
@@ -37,11 +37,23 @@ const SELECTED_KEY="novelis:selected";
 
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
 function nowIso(){return new Date().toISOString();}
-function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMemory[]=[],entities:EntityMemory[]=[],limit=40){
- const terms=[...characters.map(c=>c.name),...entities.map(e=>e.name)].map(v=>String(v||"").trim().toLowerCase()).filter(v=>v.length>=2);
+function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMemory[]=[],entities:EntityMemory[]=[],limit=30){
  const active=facts.filter(f=>f.status!=="superseded");
- const relevant=active.filter(f=>{const subject=String(f.subjectName||"").toLowerCase();return subject&&terms.some(t=>subject.includes(t)||t.includes(subject))||terms.some(t=>String(f.statement||"").toLowerCase().includes(t));});
- return (relevant.length?relevant:active).slice(0,limit);
+ if(!active.length)return [];
+ const hay=String(text||"").toLowerCase();
+ const terms=[...characters.map(c=>c.name),...entities.map(e=>e.name)].map(v=>String(v||"").trim().toLowerCase()).filter(v=>v.length>=2);
+ return active.map((fact,index)=>{
+  const subject=String(fact.subjectName||"").trim().toLowerCase();
+  const statement=String(fact.statement||"").toLowerCase();
+  let score=Math.max(0,5-index*0.01);
+  if(subject&&hay.includes(subject))score+=10;
+  for(const term of terms){
+   if(subject===term)score+=6;
+   else if(subject&&subject.includes(term))score+=3;
+   if(hay.includes(term)&&statement.includes(term))score+=4;
+  }
+  return {fact,score};
+ }).sort((a,b)=>b.score-a.score).slice(0,limit).map(x=>x.fact);
 }
 
 type LocalStore={version:number;updatedAt:string;novels:Novel[]};
@@ -77,8 +89,18 @@ function normalizeNovel(n:Partial<Novel>):Novel{
    updatedAt,
    builder:{...emptyBuilder,...n.builder},
    chapterList,
-   factMemory:Array.isArray(n.factMemory)?n.factMemory.filter((f:any)=>f&&typeof f.statement==="string").map((f:any)=>({id:String(f.id||createId("fact")),subjectId:typeof f.subjectId==="string"?f.subjectId:undefined,subjectType:f.subjectType==="character"||f.subjectType==="entity"||f.subjectType==="relationship"||f.subjectType==="world"||f.subjectType==="plot"?f.subjectType:"plot",subjectName:typeof f.subjectName==="string"?f.subjectName:undefined,statement:f.statement.trim(),status:f.status==="superseded"||f.status==="uncertain"?"active":f.status==="active"?"active":"active",firstChapter:Number.isFinite(Number(f.firstChapter))?Number(f.firstChapter):undefined,lastChapter:Number.isFinite(Number(f.lastChapter))?Number(f.lastChapter):undefined})):[],
-   chapters:chapterList.length
+   factMemory:Array.isArray(n.factMemory)?n.factMemory.filter((f:any)=>f&&typeof f.statement==="string").map((f:any)=>({
+    id:String(f.id||createId("fact")),
+    subjectId:typeof f.subjectId==="string"?f.subjectId:undefined,
+    subjectType:f.subjectType==="character"||f.subjectType==="entity"||f.subjectType==="relationship"||f.subjectType==="world"||f.subjectType==="plot"?f.subjectType:"plot",
+    subjectName:typeof f.subjectName==="string"?f.subjectName:undefined,
+    statement:String(f.statement).trim(),
+    status:f.status==="superseded"||f.status==="uncertain"||f.status==="active"?f.status:"active",
+    firstChapter:Number.isFinite(Number(f.firstChapter))?Number(f.firstChapter):undefined,
+    lastChapter:Number.isFinite(Number(f.lastChapter))?Number(f.lastChapter):undefined,
+    replacesId:typeof f.replacesId==="string"?f.replacesId:undefined
+   })):[],
+      chapters:chapterList.length
  };
 }
 
@@ -337,10 +359,14 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const nextEntities=mergeByName(entityMemories,incomingEntities);
    const factMap=new Map(factMemory.map(item=>[item.id,item]));
    for(const incoming of incomingFacts){
-    const normalized={...incoming,id:incoming.id&&factMap.has(incoming.id)?incoming.id:createId("fact"),statement:String(incoming.statement||"").trim(),status:incoming.status==="superseded"||incoming.status==="uncertain"?"superseded"===incoming.status?"superseded":"uncertain":"active"} as FactMemory;
-    if(!normalized.statement)continue;
-    const existing=factMap.get(normalized.id);
-    factMap.set(normalized.id,existing?{...existing,...normalized,id:existing.id}:normalized);
+    const statement=String(incoming.statement||"").trim();
+    if(!statement)continue;
+    const replacesId=typeof incoming.replacesId==="string"?incoming.replacesId:undefined;
+    if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
+    const existing=incoming.id?factMap.get(String(incoming.id)):undefined;
+    const id=existing?.id||String(incoming.id||createId("fact"));
+    const status=incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active";
+    factMap.set(id,{...existing,...incoming,id,statement,status,firstChapter:Number(incoming.firstChapter||existing?.firstChapter||chapterNumber),lastChapter:Number(incoming.lastChapter||chapterNumber),replacesId});
    }
    const nextFacts=Array.from(factMap.values());
    setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setFactMemory(nextFacts);setMemory(nextMemory);
@@ -400,7 +426,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     action:"qualityControl",
     novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
     chapter:{title:title.trim()||"Bab "+chapterNumber,content:text,number:chapterNumber},
-    previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null,
+    previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null,
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menjalankan Quality Control.");
@@ -427,7 +453,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  };
 
  const saveMemory=()=>{
-  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
   setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
   setNotice("Story Memory tersimpan • status kembali hijau");
  };
