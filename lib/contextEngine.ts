@@ -166,8 +166,11 @@ export function buildContext(
     ? novel.builder.locked.map((v:any)=>text(v)).filter(Boolean)
     : [];
 
+  // Superseded facts remain in persistent memory for history/replacement tracking,
+  // but must never compete with active/uncertain facts for AI context.
   const allFacts=Array.isArray(novel?.factMemory)?novel.factMemory:[];
-  let factsRanked = rank(allFacts,query,currentChapter,limits.facts);
+  const contextFacts=allFacts.filter((item:any)=>item?.status!=="superseded");
+  let factsRanked = rank(contextFacts,query,currentChapter,limits.facts);
   const charsRanked = rank(Array.isArray(novel?.charactersMemory)?novel.charactersMemory:[],query,currentChapter,limits.characters);
   const entitiesRanked = rank(Array.isArray(novel?.entitiesMemory)?novel.entitiesMemory:[],query,currentChapter,limits.entities);
   if(action==="memoryFoundation"){
