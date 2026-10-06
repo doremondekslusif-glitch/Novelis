@@ -339,7 +339,6 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
-   if(chapterVersion!==`${activeId}:${title}:${text.length}:${text.slice(-120)}`)throw new Error("Hasil AI dibatalkan karena bab berubah saat AI sedang bekerja. Jalankan AI lagi pada versi terbaru.");
    const generated=(data.text||"").trim();if(!generated)throw new Error("AI tidak menghasilkan teks.");
    if(action==="generate"||action==="continue")setText(text.trim()?text.trim()+"\n\n"+generated:generated);
    else setText(generated);
