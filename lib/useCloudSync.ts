@@ -24,6 +24,8 @@ export function useCloudSync<T extends CloudNovel>(
   const novelsRef=useRef(novels);
   const lastUploadRef=useRef<Map<string,string>>(new Map());
   const loadingRef=useRef(false);
+  const deletingRef=useRef<Set<string>>(new Set());
+  const saveLocksRef=useRef<Map<string,Promise<void>>>(new Map());
 
   useEffect(()=>{novelsRef.current=novels},[novels]);
 
@@ -145,6 +147,11 @@ export function useCloudSync<T extends CloudNovel>(
         if(!user)return;
 
         for(const novel of changed){
+          if(deletingRef.current.has(novel.id))continue;
+          let releaseSave!:()=>void;
+          const saveLock=new Promise<void>(resolve=>{releaseSave=resolve});
+          saveLocksRef.current.set(novel.id,saveLock);
+          try{
           const currentBeforeSave=novelsRef.current.find(item=>item.id===novel.id);
           if(!currentBeforeSave||syncToken(currentBeforeSave)!==syncToken(novel))continue;
           const localUpdated=novel.updatedAt||new Date().toISOString();
@@ -214,6 +221,10 @@ export function useCloudSync<T extends CloudNovel>(
             novelsRef.current=novelsRef.current.map(item=>item.id===novel.id?savedNovel:item);
             lastUploadRef.current.set(novel.id,syncToken(savedNovel));
           }
+          }finally{
+            if(saveLocksRef.current.get(novel.id)===saveLock)saveLocksRef.current.delete(novel.id);
+            releaseSave();
+          }
         }
       }catch(error){
         console.error("Novelis cloud save failed",error);
@@ -224,7 +235,11 @@ export function useCloudSync<T extends CloudNovel>(
   },[novels,cloudReady,enabled]);
 
   const deleteNovelPermanently=async(novelId:string)=>{
+    deletingRef.current.add(novelId);
+    const pendingSave=saveLocksRef.current.get(novelId);
+    if(pendingSave)await pendingSave;
     const supabase=supabaseRef.current;
+    try{
     if(enabled&&supabase&&hasSupabaseConfig){
       const {data:{user},error:userError}=await supabase.auth.getUser();
       if(userError)throw userError;
@@ -248,7 +263,10 @@ export function useCloudSync<T extends CloudNovel>(
     }
     setNovels(current=>current.filter(n=>n.id!==novelId));
     novelsRef.current=novelsRef.current.filter(n=>n.id!==novelId);
-    lastUploadRef.current.clear();
+    lastUploadRef.current.delete(novelId);
+    }finally{
+      deletingRef.current.delete(novelId);
+    }
   };
 
   return {cloudReady,deleteNovelPermanently};
