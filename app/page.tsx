@@ -346,12 +346,25 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    };
    const nextCharacters=mergeByName(characterMemories,incomingCharacters);
    const nextEntities=mergeByName(entityMemories,incomingEntities);
-   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setMemory(nextMemory);setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
+   const incomingFacts=Array.isArray(data.facts)?data.facts as FactMemory[]:[];
+   const factMap=new Map(factMemory.map(item=>[item.id,item]));
+   for(const incoming of incomingFacts){
+    const statement=String(incoming?.statement||"").trim();
+    if(!statement)continue;
+    const replacesId=typeof incoming?.replacesId==="string"?incoming.replacesId:undefined;
+    if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
+    const existing=incoming?.id?factMap.get(String(incoming.id)):undefined;
+    const id=existing?.id||String(incoming?.id||createId("fact"));
+    const status=incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active";
+    factMap.set(id,{...existing,...incoming,id,statement,status,firstChapter:Number(incoming.firstChapter||existing?.firstChapter||chapterNumber),lastChapter:Number(incoming.lastChapter||chapterNumber),replacesId});
+   }
+   const nextFacts=Array.from(factMap.values());
+   const nextStatus:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:"green";
+   const nextNeedsUpdate=nextStatus!=="green";
+   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setFactMemory(nextFacts);setMemory(nextMemory);setMemoryNeedsUpdate(nextNeedsUpdate);setMemoryStatus(nextStatus);setMemoryStatusChapter(chapterNumber);
    setDirty(false);
-   // Setelah Ringkas & Analisis berhasil, status resmi menjadi hijau.
-   // Simpan juga ke parent agar autosave berikutnya tidak mengembalikan status kuning.
-   onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
-   setNotice("Ringkasan + Memory Foundation diperbarui • status kembali hijau");
+   onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,factMemory:nextFacts,memoryNeedsUpdate:nextNeedsUpdate,memoryStatus:nextStatus,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
+   setNotice(`Ringkasan + Memory Foundation diperbarui • status ${nextStatus==="green"?"hijau":nextStatus==="yellow"?"kuning":"merah"}`);
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
  };
 
@@ -420,14 +433,14 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal membangun Story Memory.");
    const nextMemory=(data.text||"").trim();if(!nextMemory)throw new Error("AI tidak menghasilkan Story Memory.");
    setMemory(nextMemory);
-   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
    setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
    setNotice("Story Memory diperbarui • status kembali hijau");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membangun Story Memory.")}finally{setMemoryBusy(false)}
  };
 
  const saveMemory=()=>{
-  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
   setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
   setNotice("Story Memory tersimpan • status kembali hijau");
  };
