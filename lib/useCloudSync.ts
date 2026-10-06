@@ -52,7 +52,8 @@ export function useCloudSync<T extends CloudNovel>(
         const cloud=(data||[]).map(row=>({
           ...((row.data||{}) as T),
           id:String(row.novel_id),
-          updatedAt:(row.data as T)?.updatedAt||row.updated_at
+          updatedAt:row.updated_at||((row.data as T)?.updatedAt),
+          cloudVersion:Number(row.version||0)
         }));
 
         const local=novelsRef.current;
