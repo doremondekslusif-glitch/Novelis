@@ -13,6 +13,14 @@ function newer(a?:string,b?:string){
 
 function syncToken(item:CloudNovel){return item.id+"::"+(item.updatedAt||"")+"::"+Number(item.cloudVersion||0);}
 
+function deleteComparable(item:CloudNovel){
+  const copy={...item};
+  delete copy.cloudVersion;
+  delete copy.updatedAt;
+  delete copy.updated;
+  return JSON.stringify(copy);
+}
+
 export function useCloudSync<T extends CloudNovel>(
   novels:T[],
   setNovels:(value:T[]|((prev:T[])=>T[]))=>void,
@@ -236,34 +244,97 @@ export function useCloudSync<T extends CloudNovel>(
 
   const deleteNovelPermanently=async(novelId:string)=>{
     deletingRef.current.add(novelId);
-    const pendingSave=saveLocksRef.current.get(novelId);
-    if(pendingSave)await pendingSave;
-    const supabase=supabaseRef.current;
     try{
-    if(enabled&&supabase&&hasSupabaseConfig){
-      const {data:{user},error:userError}=await supabase.auth.getUser();
-      if(userError)throw userError;
-      if(user){
-        const current=novelsRef.current.find(item=>item.id===novelId);
-        const expectedVersion=Number(current?.cloudVersion||0);
-        const {data,error}=await supabase.rpc("delete_novel_atomic",{
-          p_novel_id:novelId,
-          p_expected_version:expectedVersion
-        });
-        if(error)throw error;
-        const result=Array.isArray(data)?data[0]:data;
-        if(result?.status==="conflict"&&result?.data){
-          const remoteNovel={...((result.data||{}) as T),id:novelId,updatedAt:result.updated_at||((result.data as T)?.updatedAt),cloudVersion:Number(result.version||0)};
-          setNovels(items=>items.map(item=>item.id===novelId?remoteNovel:item));
-          novelsRef.current=novelsRef.current.map(item=>item.id===novelId?remoteNovel:item);
-          lastUploadRef.current.set(novelId,syncToken(remoteNovel));
-          throw new Error("Novel berubah di perangkat lain. Penghapusan dibatalkan agar data terbaru tidak hilang.");
+      const pendingSave=saveLocksRef.current.get(novelId);
+      if(pendingSave)await pendingSave;
+
+      const supabase=supabaseRef.current;
+      if(enabled&&supabase&&hasSupabaseConfig){
+        const {data:{user},error:userError}=await supabase.auth.getUser();
+        if(userError)throw userError;
+        if(user){
+          const current=novelsRef.current.find(item=>item.id===novelId);
+          if(!current)throw new Error("Novel tidak ditemukan.");
+
+          // Re-read the cloud row after all local saves have settled. This prevents
+          // a stale local cloudVersion from creating a false delete conflict.
+          const {data:remote,error:remoteError}=await supabase
+            .from("novels")
+            .select("novel_id,data,updated_at,version")
+            .eq("user_id",user.id)
+            .eq("novel_id",novelId)
+            .maybeSingle();
+          if(remoteError)throw remoteError;
+
+          if(remote){
+            const remoteNovel={
+              ...((remote.data||{}) as T),
+              id:String(remote.novel_id),
+              updatedAt:remote.updated_at||((remote.data as T)?.updatedAt),
+              cloudVersion:Number(remote.version||0)
+            } as T;
+
+            const localMatchesRemote=deleteComparable(current)===deleteComparable(remoteNovel);
+
+            if(!localMatchesRemote&&Number(remote.version||0)!==Number(current.cloudVersion||0)){
+              setNovels(items=>items.map(item=>item.id===novelId?remoteNovel:item));
+              novelsRef.current=novelsRef.current.map(item=>item.id===novelId?remoteNovel:item);
+              lastUploadRef.current.set(novelId,syncToken(remoteNovel));
+              throw new Error("Novel berubah di perangkat lain. Penghapusan dibatalkan agar data terbaru tidak hilang.");
+            }
+
+            // Same novel data with a newer version means the cloud was updated by
+            // Novelis itself (for example, autosave). Use that latest version.
+            const expectedVersion=Number(remote.version||0);
+            const {data,error}=await supabase.rpc("delete_novel_atomic",{
+              p_novel_id:novelId,
+              p_expected_version:expectedVersion
+            });
+            if(error)throw error;
+            const result=Array.isArray(data)?data[0]:data;
+
+            if(result?.status==="conflict"&&result?.data){
+              const conflictNovel={
+                ...((result.data||{}) as T),
+                id:novelId,
+                updatedAt:result.updated_at||((result.data as T)?.updatedAt),
+                cloudVersion:Number(result.version||0)
+              } as T;
+
+              // A race occurred after the read. Retry only when the conflicting
+              // version still contains exactly the same novel data; otherwise
+              // preserve the remote change and abort deletion.
+              if(deleteComparable(current)===deleteComparable(conflictNovel)){
+                const retry=await supabase.rpc("delete_novel_atomic",{
+                  p_novel_id:novelId,
+                  p_expected_version:Number(conflictNovel.cloudVersion||0)
+                });
+                if(retry.error)throw retry.error;
+                const retryResult=Array.isArray(retry.data)?retry.data[0]:retry.data;
+                if(retryResult?.status==="deleted"||retryResult?.status==="missing"){
+                  setNovels(items=>items.filter(item=>item.id!==novelId));
+                  novelsRef.current=novelsRef.current.filter(item=>item.id!==novelId);
+                  lastUploadRef.current.delete(novelId);
+                  return;
+                }
+              }
+
+              setNovels(items=>items.map(item=>item.id===novelId?conflictNovel:item));
+              novelsRef.current=novelsRef.current.map(item=>item.id===novelId?conflictNovel:item);
+              lastUploadRef.current.set(novelId,syncToken(conflictNovel));
+              throw new Error("Novel berubah di perangkat lain. Penghapusan dibatalkan agar data terbaru tidak hilang.");
+            }
+
+            if(result?.status!=="deleted"&&result?.status!=="missing"){
+              throw new Error("Penghapusan novel dari cloud tidak berhasil.");
+            }
+          }
         }
       }
-    }
-    setNovels(current=>current.filter(n=>n.id!==novelId));
-    novelsRef.current=novelsRef.current.filter(n=>n.id!==novelId);
-    lastUploadRef.current.delete(novelId);
+
+      setNovels(current=>current.filter(n=>n.id!==novelId));
+      novelsRef.current=novelsRef.current.filter(n=>n.id!==novelId);
+      lastUploadRef.current.delete(novelId);
     }finally{
       deletingRef.current.delete(novelId);
     }
