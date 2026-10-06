@@ -49,7 +49,7 @@ type GeminiErrorInfo={
 
 const DEFAULT_MODEL=process.env.GEMINI_MODEL||"gemini-3.8-flash";
 const DEFAULT_TIMEOUT=50000;
-const DEFAULT_RETRIES=1;
+const DEFAULT_RETRIES=2;
 
 function requestId(){
  return "req_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,9);
@@ -204,7 +204,9 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
    // 429/quota tidak di-retry otomatis. 408/503 saja yang boleh retry.
    if((response.status===408||response.status===503)&&attempt<maxRetries){
     const retryAfter=Number(response.headers.get("retry-after")||0);
-    const delay=retryAfter>0?Math.min(retryAfter*1000,8000):2000;
+    const backoff=2000*Math.pow(2,attempt);
+    const jitter=Math.floor(Math.random()*350);
+    const delay=retryAfter>0?Math.min(retryAfter*1000,10000):Math.min(backoff+jitter,8000);
     await new Promise(resolve=>setTimeout(resolve,delay));
     continue;
    }
