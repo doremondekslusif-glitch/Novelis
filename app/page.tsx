@@ -336,7 +336,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
      storyThreads,
      characterArcs
     },
-    chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapters:chapters.map((c,i)=>({number:i+1,title:c.title,summary:c.summary||""})),
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
@@ -459,7 +459,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     chapterId:activeId,
     chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null,
-    chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
+    chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menjalankan Quality Control.");
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Quality Control dibatalkan karena naskah sudah berubah. Silakan jalankan pemeriksaan kembali.");
