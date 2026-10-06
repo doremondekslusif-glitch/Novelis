@@ -38,7 +38,6 @@ const SELECTED_KEY="novelis:selected";
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
 function nowIso(){return new Date().toISOString();}
 function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMemory[]=[],entities:EntityMemory[]=[],limit=40){
- const hay=String(text||"").toLowerCase();
  const terms=[...characters.map(c=>c.name),...entities.map(e=>e.name)].map(v=>String(v||"").trim().toLowerCase()).filter(v=>v.length>=2);
  const active=facts.filter(f=>f.status!=="superseded");
  const relevant=active.filter(f=>{const subject=String(f.subjectName||"").toLowerCase();return subject&&terms.some(t=>subject.includes(t)||t.includes(subject))||terms.some(t=>String(f.statement||"").toLowerCase().includes(t));});
