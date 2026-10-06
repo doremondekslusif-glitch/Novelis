@@ -105,7 +105,7 @@ function scoreItem(item:AnyRecord, queryTerms:string[], currentChapter:number){
   return {item,score,reason};
 }
 
-function rank(items:Any[], query:string, currentChapter:number, limit:number){
+function rank(items:AnyRecord[], query:string, currentChapter:number, limit:number){
   const queryTerms = unique([
     ...words(query),
     ...query.split(/[,.;:!?\\n]+/).map(v=>lower(v)).filter(v=>v.length>=2)
@@ -126,7 +126,7 @@ function trimToBudget(result:ContextResult){
   ] as const;
   let used=approxSize(result.storyMemory)+approxSize(result.canon);
   for(const section of sections){
-    const arr=(result as any)[section] as Any[];
+    const arr=(result as any)[section] as AnyRecord[];
     while(arr.length && used+approxSize(arr)>result.budget){
       arr.pop();
     }
@@ -137,7 +137,7 @@ function trimToBudget(result:ContextResult){
 
 export function buildContext(
   novel:AnyRecord,
-  chapters:Any[],
+  chapters:AnyRecord[],
   request:ContextRequest
 ):ContextResult{
   const action = request.action;
