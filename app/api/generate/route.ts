@@ -1,6 +1,7 @@
 import {NextResponse} from "next/server";
 import {buildContext,contextForPrompt} from "@/lib/contextEngine";
 import {executeAI,aiModel,type AIAction} from "@/lib/aiEngine";
+import {getChapterWordTarget} from "@/lib/genreProfile";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -33,11 +34,13 @@ export async function POST(request:Request){
   const charactersMemory=Array.isArray(novel.charactersMemory)?novel.charactersMemory:[];
   const entitiesMemory=Array.isArray(novel.entitiesMemory)?novel.entitiesMemory:[];
   const factMemory=Array.isArray(novel.factMemory)?novel.factMemory:[];
+  const chapterWordTarget=getChapterWordTarget(String(novel.genre||""),String(builder.length||"sedang"));
+  const chapterTargetText=`${chapterWordTarget.min}–${chapterWordTarget.max} kata`;
   const clip=(value:unknown,max:number)=>String(value??"").trim().slice(0,max);
 
   const instructions:Record<Action,string>={
-   generate:"Mulai Bab 1 dari awal. Tulis bab yang natural, imersif, dan kaya adegan. Targetkan sekitar 900-1400 kata agar respons selesai cepat tanpa mengorbankan kualitas.",
-   continue:"Lanjutkan cerita tepat setelah AKHIR bab sebelumnya. Jangan mengulang adegan, dialog, tindakan, informasi, atau kejadian yang sudah terjadi. Bagian akhir bab sebelumnya adalah TITIK MULAI cerita ini. Jika bab sebelumnya berakhir saat tokoh sedang berada di suatu tempat, melakukan sesuatu, atau baru mengetahui sesuatu, mulai dari keadaan terakhir tersebut dan bergerak maju. Jangan kembali ke awal bab sebelumnya hanya untuk menjelaskan ulang. Gunakan ringkasan untuk memahami keseluruhan bab dan KONTEKS AKHIR untuk menentukan posisi cerita yang sebenarnya. Targetkan sekitar 900-1400 kata agar respons selesai cepat tanpa mengorbankan kesinambungan.",
+   generate:"Mulai Bab 1 dari awal. Tulis bab yang natural, imersif, dan kaya adegan. Target panjang bab untuk genre dan skala novel ini adalah "+chapterTargetText+". Jadikan rentang ini sebagai target utama, tetapi biarkan adegan berhenti secara natural jika struktur cerita sudah selesai.",
+   continue:"Lanjutkan cerita tepat setelah AKHIR bab sebelumnya. Jangan mengulang adegan, dialog, tindakan, informasi, atau kejadian yang sudah terjadi. Bagian akhir bab sebelumnya adalah TITIK MULAI cerita ini. Jika bab sebelumnya berakhir saat tokoh sedang berada di suatu tempat, melakukan sesuatu, atau baru mengetahui sesuatu, mulai dari keadaan terakhir tersebut dan bergerak maju. Jangan kembali ke awal bab sebelumnya hanya untuk menjelaskan ulang. Gunakan ringkasan untuk memahami keseluruhan bab dan KONTEKS AKHIR untuk menentukan posisi cerita yang sebenarnya. Target panjang bab untuk genre dan skala novel ini adalah "+chapterTargetText+". Jadikan rentang ini sebagai target utama, tetapi biarkan cerita bergerak natural dan jangan memaksakan kata hanya demi angka.",
    improve:"Perbaiki teks bab yang diberikan. Pertahankan inti cerita, fakta, karakter, urutan kejadian, dan gaya penulisannya. Perbaiki kalimat, alur, transisi, dialog, dan konsistensi tanpa mengubah maksud cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    dialog:"Perkaya bagian yang diberikan dengan dialog yang natural dan sesuai karakter. Pertahankan kejadian utama dan jangan mengubah inti cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
@@ -91,6 +94,7 @@ export async function POST(request:Request){
    "Sudut pandang: "+(builder.pointOfView||"-"),
    "Target pembaca: "+(builder.audience||"-"),
    "Panjang novel: "+(builder.length||"-"),
+   "Profil panjang bab otomatis: "+chapterTargetText+" berdasarkan genre "+(chapterWordTarget.genre||"Umum")+" dan panjang novel "+(chapterWordTarget.length||"sedang")+"." ,
    "Target jumlah bab: "+(builder.chapterTarget||"-"),
    "Jenis ending: "+(builder.ending||"-"),
    "Kebebasan AI: "+(builder.aiFreedom||"-"),
@@ -120,7 +124,7 @@ export async function POST(request:Request){
    prompt,
    options:{
     model:typeof body?.model==="string"&&body.model.trim()?body.model.trim():aiModel(),
-    timeoutMs:26000,
+    timeoutMs:50000,
     maxRetries:1
    }
   };
