@@ -147,7 +147,7 @@ export function useCloudSync<T extends CloudNovel>(
           const localUpdated=novel.updatedAt||new Date().toISOString();
           const {data:remote,error:remoteError}=await supabase
             .from("novels")
-            .select("novel_id,data,updated_at")
+            .select("novel_id,data,updated_at,version")
             .eq("user_id",user.id)
             .eq("novel_id",novel.id)
             .maybeSingle();
