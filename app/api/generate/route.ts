@@ -6,37 +6,9 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=60;
 
-const MODEL="gemini-3.8-flash";
-
-function classifyGeminiError(status:number,message:string,errorBody:any){
- const raw=JSON.stringify(errorBody||"")+" "+message;
- const lower=raw.toLowerCase();
- if(status===401||status===403){
-  return {code:"API_KEY_ERROR",limitType:null,message:"API key Gemini bermasalah atau tidak diizinkan. Periksa GEMINI_API_KEY, project, dan akses API."};
- }
- if(status===404){
-  return {code:"MODEL_ERROR",limitType:null,message:"Model gemini-3.8-flash tidak ditemukan atau tidak tersedia untuk API key ini."};
- }
- if(status===429){
-  if(/requests?perday|requests?\s*\/\s*day|generate.*requests.*day|daily|per_day|perday/.test(lower)){
-   return {code:"DAILY_QUOTA",limitType:"daily_quota",message:"Daily quota Gemini habis untuk project/model ini. Tunggu sampai jendela kuota harian reset, lalu coba lagi."};
-  }
-  if(/requests?perminute|requests?\s*\/\s*minute|rpm|per_minute/.test(lower)){
-   return {code:"RPM_LIMIT",limitType:"rpm",message:"RPM limit Gemini tercapai. Tunggu sebentar sebelum mengirim request berikutnya."};
-  }
-  if(/input.*tokens?.*(minute|perminute)|output.*tokens?.*(minute|perminute)|tokens?.*perminute|tpm|token.*limit/.test(lower)){
-   return {code:"TPM_LIMIT",limitType:"tpm",message:"TPM limit Gemini tercapai. Request terlalu banyak token dalam jendela waktu ini. Tunggu sebentar lalu coba lagi."};
-  }
-  return {code:"RATE_LIMIT",limitType:"rate_limit",message:"Gemini menolak request karena rate limit/quota. Detail tidak cukup untuk membedakan daily quota, RPM, atau TPM."};
- }
- if(status===408) return {code:"TIMEOUT",limitType:null,message:"Permintaan ke Gemini terlalu lama. Coba lagi."};
- if(status>=500) return {code:"GEMINI_SERVER_ERROR",limitType:null,message:"Server Gemini sedang mengalami masalah sementara. Coba lagi beberapa saat."};
- return {code:"GEMINI_ERROR",limitType:null,message:"Gemini gagal memproses permintaan. Periksa detail error untuk diagnosis."};
-}
-
 export async function GET(){
  const apiKey=process.env.GEMINI_API_KEY;
- return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:MODEL});
+ return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:aiModel()});
 }
 
 type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"memoryFoundation"|"storyIntelligence"|"qualityControl";
@@ -83,9 +55,10 @@ export async function POST(request:Request){
 
   // Context Engine memilih memory yang relevan berdasarkan tugas dan bab aktif.
   // Ia tidak menyimpan memory; ia hanya menyusun ContextResult yang dibutuhkan AI.
+  const currentChapterId=typeof chapter?.id==="string"?chapter.id:"";
   const chapterRecords=[
-   ...chapters.map((item:any,index:number)=>({...item,number:Number(item.number||index+1)})),
-   {number:Number(chapter.number||0),title:chapter.title,content:currentText,summary:chapter.summary||""}
+   ...chapters.filter((item:any)=>!currentChapterId||String(item?.id||"")!==currentChapterId).map((item:any,index:number)=>({...item,number:Number(item.number||index+1)})),
+   {id:currentChapterId||undefined,number:Number(chapter.number||0),title:chapter.title,content:currentText,summary:chapter.summary||""}
   ];
   const contextDepth=action==="storyIntelligence"||action==="qualityControl"||action==="memory"
    ?"deep"
