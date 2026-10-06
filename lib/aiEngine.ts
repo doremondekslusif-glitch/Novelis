@@ -48,7 +48,7 @@ type GeminiErrorInfo={
 };
 
 const DEFAULT_MODEL=process.env.GEMINI_MODEL||"gemini-3.8-flash";
-const DEFAULT_TIMEOUT=26000;
+const DEFAULT_TIMEOUT=50000;
 const DEFAULT_RETRIES=1;
 
 function requestId(){
