@@ -143,7 +143,7 @@ export async function POST(request:Request){
   for(let attempt=0;attempt<2;attempt++){
    try{
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),25000);
+    const timeout=setTimeout(()=>controller.abort(),50000);
     try{
      response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,{
       method:"POST",
