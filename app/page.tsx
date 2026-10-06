@@ -271,7 +271,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [summaryBusy,setSummaryBusy]=useState(false);
  const [intelligenceBusy,setIntelligenceBusy]=useState(false);
  const [qualityBusy,setQualityBusy]=useState(false);
- const [qualityReport,setQualityReport]=useState<QualityReport|null>(novel.qualityReport||null);
+ const [qualityReport,setQualityReport]=useState<QualityReport|null>(()=>normalizeQualityReport(novel.qualityReport));
  const [focusMode,setFocusMode]=useState(false);
  const [wordGoal,setWordGoal]=useState(1000);
  const aiRequestSeq=useRef(0);
