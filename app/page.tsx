@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import AuthPanel from "@/components/AuthPanel";
 import {useCloudSync} from "@/lib/useCloudSync";
 import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2,Maximize2,Minimize2,Download,FileArchive,FileJson,FileType} from "lucide-react";
@@ -307,11 +307,13 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const finalizeChapter=()=>{ save(); };
 
  const selectChapter=(id:string)=>{if(id===activeId)return;if(dirty)save(true);setActiveId(id)};
- const addChapter=()=>{if(dirty)save(true);const id=Date.now().toString();const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};setChapters(c=>[...c,ch]);setActiveId(id);setTitle(ch.title);setText("");setDirty(false);setNotice("")};
- const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);setDirty(true)};
+ const addChapter=()=>{if(dirty)save(true);const id=createId("chapter");const next=chapters.length+1;const ch:Chapter={id,title:`Bab ${next}`,content:"",status:"Draft"};const updated=[...chapters,ch];setChapters(updated);setActiveId(id);setTitle(ch.title);setText("");setDirty(false);persistChapter(updated);setNotice("Bab baru tersimpan");};
+ const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);persistChapter(next);setDirty(false);setNotice("Bab dihapus dan perubahan tersimpan")};
 
  const runAI=async(action:"generate"|"continue"|"improve"|"dialog"|"description")=>{
   if(generating)return;
+  const aiToken=++aiRequestSeq.current;
+  const snapshot={activeId,title,text};
   const requestId=`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
   const chapterVersion=`${activeId}:${title}:${text.length}:${text.slice(-120)}`;
   setGenerating(true);setGenerateError("");setNotice("");
@@ -339,6 +341,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
+   if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil AI dibatalkan karena naskah sudah berubah. Silakan jalankan AI kembali.");
    const generated=(data.text||"").trim();if(!generated)throw new Error("AI tidak menghasilkan teks.");
    if(action==="generate"||action==="continue")setText(text.trim()?text.trim()+"\n\n"+generated:generated);
    else setText(generated);
@@ -348,15 +351,21 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
 
  const runSummary=async()=>{
   if(summaryBusy||!text.trim())return;
+  const aiToken=++aiRequestSeq.current;
+  const snapshot={activeId,title,text};
   setSummaryBusy(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action:"memoryFoundation",
-    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:relevantFacts},
-    chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
-    chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
+    requestId:`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`,
+    novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory},
+    chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapterId:activeId,
+    chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
+    chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis memori cerita.");
+   if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil analisis dibatalkan karena naskah sudah berubah. Silakan jalankan Ringkas & Analisis kembali.");
    const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:(text.trim().length>80?"Selesai":"Draft") as Chapter["status"],summary:String(data.summary||"").trim()}:c);
    const nextMemory=String(data.storyMemory||memory).trim();
    const incomingCharacters=Array.isArray(data.characters)?data.characters as CharacterMemory[]:[];
@@ -395,15 +404,21 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
 
  const runIntelligence=async()=>{
   if(intelligenceBusy||!text.trim())return;
+  const aiToken=++aiRequestSeq.current;
+  const snapshot={activeId,title,text};
   setIntelligenceBusy(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action:"storyIntelligence",
-    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:qualityFacts,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
-    chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
-    chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
+    requestId:`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`,
+    novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
+    chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapterId:activeId,
+    chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
+    chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis Story Intelligence.");
+   if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Story Intelligence dibatalkan karena naskah sudah berubah. Silakan jalankan analisis kembali.");
    const mergeById=<T extends {id?:string}>(existing:T[],incoming:T[])=>{
     const map=new Map(existing.map(item=>[String(item.id||JSON.stringify(item)),item]));
     for(const item of incoming){
@@ -432,16 +447,22 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
 
  const runQualityCheck=async()=>{
   if(qualityBusy||!text.trim())return;
+  const aiToken=++aiRequestSeq.current;
+  const snapshot={activeId,title,text};
   setQualityBusy(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action:"qualityControl",
-    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:relevantFacts,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
-    chapter:{title:title.trim()||"Bab "+chapterNumber,content:text,number:chapterNumber},
+    requestId:`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`,
+    novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
+    chapter:{id:activeId,title:title.trim()||"Bab "+chapterNumber,content:text,number:chapterNumber},
+    chapterId:activeId,
+    chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null,
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menjalankan Quality Control.");
+   if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Quality Control dibatalkan karena naskah sudah berubah. Silakan jalankan pemeriksaan kembali.");
    const issues=Array.isArray(data.issues)?data.issues as QualityIssue[]:[];
    const report:QualityReport={overall:data.overall==="clear"?"clear":"review",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID")};
    setQualityReport(report);setNotice(issues.length?"Quality Control menemukan "+issues.length+" hal untuk ditinjau":"Quality Control: tidak menemukan masalah penting");
@@ -465,9 +486,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  };
 
  const saveMemory=()=>{
-  onUpdate({...novel,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
-  setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
-  setNotice("Story Memory tersimpan • status kembali hijau");
+  const nextMemory=memory.trim();
+  const nextStatus=memoryNeedsUpdate?memoryStatus:"green";
+  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus:nextStatus,memoryStatusChapter:memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
+  setMemory(nextMemory);setMemoryStatus(nextStatus);setNotice(memoryNeedsUpdate?"Story Memory tersimpan • status analisis dipertahankan":"Story Memory tersimpan");
  };
 
  const primaryAction=chapterNumber===1?"generate":"continue";
