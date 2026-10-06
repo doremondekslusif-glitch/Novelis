@@ -315,8 +315,22 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setGenerating(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action,novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,chapterSummaries,factMemory:relevantFacts},
+    action,
+    novel:{
+     title:novel.title,
+     genre:novel.genre,
+     builder:novel.builder,
+     memory,
+     charactersMemory:characterMemories,
+     entitiesMemory:entityMemories,
+     factMemory,
+     relationshipsMemory:relationships,
+     timeline,
+     storyThreads,
+     characterArcs
+    },
     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapters:chapters.map((c,i)=>({number:i+1,title:c.title,summary:c.summary||""})),
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
