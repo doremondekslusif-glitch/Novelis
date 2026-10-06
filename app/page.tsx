@@ -403,23 +403,27 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const nextEntities=mergeByName(entityMemories,incomingEntities);
    const incomingFacts=Array.isArray(data.facts)?data.facts as FactMemory[]:[];
    const factMap=new Map(factMemory.map(item=>[item.id,item]));
+   let unresolvedReplacement=false;
    for(const incoming of incomingFacts){
     const statement=String(incoming?.statement||"").trim();
     if(!statement)continue;
+    const requestedReplacement=Boolean(incoming?.replacesId||incoming?.replacesSubjectName||incoming?.replacesStatement);
     const replacesId=resolveReplacementFactId(incoming,factMemory);
     if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
+    else if(requestedReplacement)unresolvedReplacement=true;
     const existing=incoming?.id?factMap.get(String(incoming.id)):undefined;
     const id=existing?.id||String(incoming?.id||createId("fact"));
-    const status=incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active";
+    const status=unresolvedReplacement?"uncertain":(incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active");
     factMap.set(id,{...existing,...incoming,id,statement,status,firstChapter:Number(incoming.firstChapter||existing?.firstChapter||chapterNumber),lastChapter:Number(incoming.lastChapter||chapterNumber),replacesId});
    }
    const nextFacts=Array.from(factMap.values());
-   const nextStatus:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:"green";
+   const aiStatus:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:"green";
+   const nextStatus:MemoryStatus=unresolvedReplacement?"red":aiStatus;
    const nextNeedsUpdate=nextStatus!=="green";
    setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setFactMemory(nextFacts);setMemory(nextMemory);setMemoryNeedsUpdate(nextNeedsUpdate);setMemoryStatus(nextStatus);setMemoryStatusChapter(chapterNumber);
    setDirty(false);
    onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,factMemory:nextFacts,memoryNeedsUpdate:nextNeedsUpdate,memoryStatus:nextStatus,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
-   setNotice(`Ringkasan + Memory Foundation diperbarui • status ${nextStatus==="green"?"hijau":nextStatus==="yellow"?"kuning":"merah"}`);
+   setNotice(`Ringkasan + Memory Foundation diperbarui • status ${nextStatus==="green"?"hijau":nextStatus==="yellow"?"kuning":"merah"}${unresolvedReplacement?" • ada fakta pengganti yang belum dapat dipetakan dengan aman":""}`);
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
  };
 
