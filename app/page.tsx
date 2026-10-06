@@ -36,8 +36,8 @@ const PAGE_KEY="novelis:page";
 const SELECTED_KEY="novelis:selected";
 
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
-function normalizeFactText(value:any){return String(value??"").toLowerCase().replace(/[^a-z0-9\\u00C0-\\u024F]+/gi," ").trim();}
-function factTokens(value:any){return Array.from(new Set(normalizeFactText(value).split(/\\s+/).filter(v=>v.length>=3)));}
+function normalizeFactText(value:any){return String(value??"").toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]+/gi," ").trim();}
+function factTokens(value:any){return Array.from(new Set(normalizeFactText(value).split(/\s+/).filter(v=>v.length>=3)));}
 function factOverlap(a:any,b:any){const aa=factTokens(a);const bb=new Set(factTokens(b));if(!aa.length||!bb.size)return 0;return aa.filter(v=>bb.has(v)).length/aa.length;}
 function resolveReplacementFactId(incoming:any,facts:FactMemory[]){
  const direct=typeof incoming?.replacesId==="string"?incoming.replacesId.trim():"";
