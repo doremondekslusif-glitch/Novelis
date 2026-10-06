@@ -20,7 +20,7 @@ export function useCloudSync<T extends CloudNovel>(
   const supabaseRef=useRef<ReturnType<typeof createClient>|null>(null);
   if(hasSupabaseConfig&&!supabaseRef.current)supabaseRef.current=createClient();
   const novelsRef=useRef(novels);
-  const lastUploadRef=useRef("");
+  const lastUploadRef=useRef<Map<string,string>>(new Map());
   const loadingRef=useRef(false);
 
   useEffect(()=>{novelsRef.current=novels},[novels]);
@@ -81,17 +81,17 @@ export function useCloudSync<T extends CloudNovel>(
         setCloudReady(true);
 
         if(upload.length){
-          const {error:saveError}=await supabase.from("novels").upsert(
-            upload.map(n=>({
+          for(const item of upload){
+            const {error:saveError}=await supabase.from("novels").upsert({
               user_id:user.id,
-              novel_id:n.id,
-              data:n,
+              novel_id:item.id,
+              data:item,
               version:1,
-              updated_at:n.updatedAt||new Date().toISOString()
-            })),
-            {onConflict:"user_id,novel_id"}
-          );
-          if(saveError)console.error("Novelis cloud migration failed",saveError);
+              updated_at:item.updatedAt||new Date().toISOString()
+            },{onConflict:"user_id,novel_id"});
+            if(saveError)console.error("Novelis cloud migration failed",saveError);
+            else lastUploadRef.current.set(item.id,`${item.id}:${item.updatedAt||""}`);
+          }
         }
       }catch(error){
         console.error("Novelis cloud load failed",error);
@@ -106,7 +106,7 @@ export function useCloudSync<T extends CloudNovel>(
     const {data:{subscription}}=supabase.auth.onAuthStateChange(event=>{
       if(event==="SIGNED_OUT"){
         setCloudReady(false);
-        lastUploadRef.current="";
+        lastUploadRef.current.clear();
       }else if(event==="SIGNED_IN"||event==="TOKEN_REFRESHED"){
         window.setTimeout(load,0);
       }
@@ -118,8 +118,8 @@ export function useCloudSync<T extends CloudNovel>(
   useEffect(()=>{
     if(!enabled||!cloudReady)return;
 
-    const signature=novels.map(n=>`${n.id}:${n.updatedAt||""}`).join("|");
-    if(signature===lastUploadRef.current)return;
+    const changed=novels.filter(n=>lastUploadRef.current.get(n.id)!==`${n.id}:${n.updatedAt||""}`);
+    if(!changed.length)return;
 
     const timer=window.setTimeout(async()=>{
       try{
@@ -128,20 +128,35 @@ export function useCloudSync<T extends CloudNovel>(
         const {data:{user}}=await supabase.auth.getUser();
         if(!user)return;
 
-        const payload=novels.map(n=>({
-          user_id:user.id,
-          novel_id:n.id,
-          data:n,
-          version:1,
-          updated_at:n.updatedAt||new Date().toISOString()
-        }));
+        for(const novel of changed){
+          const localUpdated=novel.updatedAt||new Date().toISOString();
+          const {data:remote,error:remoteError}=await supabase
+            .from("novels")
+            .select("novel_id,data,updated_at")
+            .eq("user_id",user.id)
+            .eq("novel_id",novel.id)
+            .maybeSingle();
+          if(remoteError)throw remoteError;
 
-        const {error}=await supabase
-          .from("novels")
-          .upsert(payload,{onConflict:"user_id,novel_id"});
+          const remoteUpdated=remote?.updated_at||((remote?.data as T|undefined)?.updatedAt);
+          if(remote&&remoteUpdated&&Date.parse(remoteUpdated)>Date.parse(localUpdated)){
+            const remoteNovel={...((remote.data||{}) as T),id:String(remote.novel_id),updatedAt:remoteUpdated};
+            setNovels(current=>current.map(item=>item.id===novel.id?remoteNovel:item));
+            novelsRef.current=novelsRef.current.map(item=>item.id===novel.id?remoteNovel:item);
+            lastUploadRef.current.set(novel.id,`${novel.id}:${remoteUpdated}`);
+            continue;
+          }
 
-        if(error)throw error;
-        lastUploadRef.current=signature;
+          const {error}=await supabase.from("novels").upsert({
+            user_id:user.id,
+            novel_id:novel.id,
+            data:novel,
+            version:1,
+            updated_at:localUpdated
+          },{onConflict:"user_id,novel_id"});
+          if(error)throw error;
+          lastUploadRef.current.set(novel.id,`${novel.id}:${localUpdated}`);
+        }
       }catch(error){
         console.error("Novelis cloud save failed",error);
       }
@@ -166,7 +181,7 @@ export function useCloudSync<T extends CloudNovel>(
     }
     setNovels(current=>current.filter(n=>n.id!==novelId));
     novelsRef.current=novelsRef.current.filter(n=>n.id!==novelId);
-    lastUploadRef.current="";
+    lastUploadRef.current.clear();
   };
 
   return {cloudReady,deleteNovelPermanently};
