@@ -1,4 +1,5 @@
 import {NextResponse} from "next/server";
+import {buildContext,contextForPrompt} from "@/lib/contextEngine";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -75,24 +76,29 @@ export async function POST(request:Request){
 
   const currentText=clip(chapter.content,12000);
   const previousFullText=String(previousChapter?.content||"").trim();
-  // Untuk kontinuitas, bagian akhir bab lebih penting daripada bagian awal.
-  // Ambil hingga 8000 karakter terakhir agar titik berhenti cerita tetap masuk konteks.
-  const previousText=previousFullText.length>8000?previousFullText.slice(-8000):previousFullText;
-  const previousEnding=previousText;
+  // Untuk kontinuitas, bagian akhir bab tetap diprioritaskan.
+  const previousEnding=previousFullText.length>8000?previousFullText.slice(-8000):previousFullText;
   const previousSummary=clip(previousChapter?.summary,1500);
-  const summaries=clip(chapterSummaries,7000);
-  const storyMemory=clip(memory,7000);
 
-  const foundationData=[
-   charactersMemory.length?"KARAKTER YANG SUDAH DIKENAL:\n"+JSON.stringify(charactersMemory):"",
-   entitiesMemory.length?"ENTITAS YANG SUDAH DIKENAL:\n"+JSON.stringify(entitiesMemory):""
-  ].filter(Boolean).join("\n\n");
-
-  const chapterData=chapters.map((item:{title?:string;content?:string;summary?:string},index:number)=>{
-   const summary=clip(item.summary,1200);
-   const content=clip(item.content,2500);
-   return "BAB "+(index+1)+" — "+(item.title||("Bab "+(index+1)))+"\nRingkasan: "+(summary||"-")+"\nIsi penting: "+(content||"-");
-  }).join("\n\n");
+  // Context Engine memilih memory yang relevan berdasarkan tugas dan bab aktif.
+  // Ia tidak menyimpan memory; ia hanya menyusun ContextResult yang dibutuhkan AI.
+  const chapterRecords=[
+   ...chapters.map((item:any,index:number)=>({...item,number:Number(item.number||index+1)})),
+   {number:Number(chapter.number||0),title:chapter.title,content:currentText,summary:chapter.summary||""}
+  ];
+  const contextDepth=action==="storyIntelligence"||action==="qualityControl"||action==="memory"
+   ?"deep"
+   :action==="continue"||action==="memoryFoundation"||action==="summarize"
+    ?"normal"
+    :"light";
+  const context=buildContext(novel,chapterRecords,{
+   action,
+   depth:contextDepth,
+   query:[chapter.title,currentText,previousSummary,previousEnding].filter(Boolean).join("\n"),
+   currentChapter:Number(chapter.number||0),
+   budget:action==="qualityControl"||action==="storyIntelligence"?30000:undefined
+  });
+  const retrievedContext=contextForPrompt(context);
 
   const prompt=[
    "Kamu adalah AI penulis novel untuk aplikasi Novelis.",
@@ -119,12 +125,7 @@ export async function POST(request:Request){
    "Karakter: "+(builder.characters||"-"),
    "Dunia cerita: "+(builder.world||"-"),
    "Outline keseluruhan: "+(builder.outline||"-"),
-   storyMemory ? "STORY MEMORY YANG HARUS DIJAGA:\n"+storyMemory : "",
-   factMemory.length ? "FAKTA RELEVAN YANG HARUS DIJAGA:\n"+JSON.stringify(factMemory) : "",
-   summaries ? "RINGKASAN BAB TERDAHULU:\n"+summaries : "",
-   action==="memory" && chapterData ? "DATA BAB UNTUK MEMBANGUN MEMORY:\n"+chapterData : "",
-   action==="memoryFoundation" && foundationData ? foundationData : "",
-   action==="storyIntelligence"||action==="qualityControl" ? "STORY INTELLIGENCE LAMA:\n"+JSON.stringify({relationships:novel.relationshipsMemory||[],timeline:novel.timeline||[],threads:novel.storyThreads||[],arcs:novel.characterArcs||[]}) : "",
+   retrievedContext ? "KONTEKS TERPILIH OLEH CONTEXT ENGINE:\n"+retrievedContext : "",
    "",
    "BAB: "+(chapter.number||1),
    "JUDUL BAB: "+(chapter.title||"Bab tanpa judul"),
