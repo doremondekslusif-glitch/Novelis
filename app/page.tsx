@@ -37,6 +37,24 @@ const SELECTED_KEY="novelis:selected";
 
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
 function nowIso(){return new Date().toISOString();}
+function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMemory[]=[],entities:EntityMemory[]=[],limit=30){
+ const active=facts.filter(f=>f.status!=="superseded");
+ if(!active.length)return [];
+ const hay=String(text||"").toLowerCase();
+ const terms=[...characters.map(c=>c.name),...entities.map(e=>e.name)].map(v=>String(v||"").trim().toLowerCase()).filter(v=>v.length>=2);
+ return active.map((fact,index)=>{
+  const subject=String(fact.subjectName||"").trim().toLowerCase();
+  const statement=String(fact.statement||"").toLowerCase();
+  let score=Math.max(0,5-index*0.01);
+  if(subject&&hay.includes(subject))score+=10;
+  for(const term of terms){
+   if(subject===term)score+=6;
+   else if(subject&&subject.includes(term))score+=3;
+   if(hay.includes(term)&&statement.includes(term))score+=4;
+  }
+  return {fact,score};
+ }).sort((a,b)=>b.score-a.score).slice(0,limit).map(x=>x.fact);
+}
 
 type LocalStore={version:number;updatedAt:string;novels:Novel[]};
 type StorageStatus="idle"|"saving"|"saved"|"error";
@@ -244,6 +262,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
  const previousChapter=chapterNumber>1?chapters[chapterNumber-2]:null;
  const chapterSummaries=chapters.filter(c=>c.summary?.trim()).map((c,i)=>`Bab ${i+1} — ${c.title}: ${c.summary}`).join("\n");
+ const relevantFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories);
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
@@ -290,9 +309,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   setGenerating(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action,novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,chapterSummaries},
+    action,novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,chapterSummaries,factMemory:relevantFacts},
     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
-    previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null
+    previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
    const generated=(data.text||"").trim();if(!generated)throw new Error("AI tidak menghasilkan teks.");
@@ -308,7 +327,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action:"memoryFoundation",
-    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories},
+    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:relevantFacts},
     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
