@@ -56,7 +56,7 @@ const LIMITS:Record<ContextDepth,Record<string,number>> = {
 function text(value:any){return String(value ?? "").trim();}
 function lower(value:any){return text(value).toLowerCase();}
 function words(value:string){
-  return lower(value).split(/[^\\p{L}\\p{N}]+/u).filter(v=>v.length>=3);
+  return lower(value).split(/[^a-z0-9\\u00C0-\\u024F]+/gi).filter(v=>v.length>=3);
 }
 function unique(values:string[]){
   return Array.from(new Set(values.filter(Boolean)));
@@ -68,8 +68,8 @@ function entityTerms(item:AnyRecord){
     lower(item.character),
     lower(item.from),
     lower(item.to),
-    ...((Array.isArray(item.characters)?item.characters:[]).map(lower)),
-    ...((Array.isArray(item.relatedCharacters)?item.relatedCharacters:[]).map(lower))
+    ...((Array.isArray(item.characters)?item.characters:[]).map(v=>lower(v))),
+    ...((Array.isArray(item.relatedCharacters)?item.relatedCharacters:[]).map(v=>lower(v)))
   ].filter(v=>v.length>=2));
 }
 
@@ -108,7 +108,7 @@ function scoreItem(item:AnyRecord, queryTerms:string[], currentChapter:number){
 function rank(items:Any[], query:string, currentChapter:number, limit:number){
   const queryTerms = unique([
     ...words(query),
-    ...query.split(/[,.;:!?\\n]+/).map(lower).filter(v=>v.length>=2)
+    ...query.split(/[,.;:!?\\n]+/).map(v=>lower(v)).filter(v=>v.length>=2)
   ]);
   return items
     .map(item=>scoreItem(item,queryTerms,currentChapter))
@@ -121,17 +121,16 @@ function approxSize(value:any){
 }
 
 function trimToBudget(result:ContextResult){
-  const sections:Array<keyof ContextResult> = [
-    "facts","characters","entities","relationships","timeline","threads","arcs","recentChapters"
-  ];
-  let used = approxSize(result.storyMemory)+approxSize(result.canon);
+  const sections=[
+    "recentChapters","facts","characters","entities","relationships","timeline","threads","arcs"
+  ] as const;
+  let used=approxSize(result.storyMemory)+approxSize(result.canon);
   for(const section of sections){
-    const arr = result[section] as Any[];
-    while(arr.length && used > result.budget){
-      const removed = arr.pop();
-      used -= approxSize(removed);
+    const arr=(result as any)[section] as Any[];
+    while(arr.length && used+approxSize(arr)>result.budget){
+      arr.pop();
     }
-    used += approxSize(arr);
+    used+=approxSize(arr);
   }
   return result;
 }
