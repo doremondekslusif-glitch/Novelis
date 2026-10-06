@@ -4,6 +4,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import AuthPanel from "@/components/AuthPanel";
 import {useCloudSync} from "@/lib/useCloudSync";
 import {mergeMemoryFoundation,mergeStoryIntelligence,type MemoryStatus as EngineMemoryStatus} from "@/lib/memoryEngine";
+import {getChapterWordTarget,formatChapterTarget} from "@/lib/genreProfile";
 import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2,Maximize2,Minimize2,Download,FileArchive,FileJson,FileType} from "lucide-react";
 import JSZip from "jszip";
 import {jsPDF} from "jspdf";
@@ -234,7 +235,7 @@ function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;on
      <div className="builderForm"><label>Premis / ide utama<textarea value={data.premise} onChange={e=>setField("premise",e.target.value)} placeholder="Apa inti cerita yang ingin kamu ceritakan?"/></label><label>Tema<textarea value={data.theme} onChange={e=>setField("theme",e.target.value)} placeholder="Contoh: pengorbanan, keluarga, kepercayaan..."/></label>
       <div className="builderCols"><SelectField label="Tone / nuansa" value={data.tone} field="tone" options={[["dark","Gelap"],["light","Ringan"],["warm","Hangat"],["tense","Tegang"],["mysterious","Misterius"],["epic","Epik"],["emotional","Emosional"]]}/><SelectField label="Gaya penulisan" value={data.style} field="style" options={[["simple","Sederhana"],["descriptive","Deskriptif"],["poetic","Puitis"],["cinematic","Sinematik"],["dynamic","Cepat & dinamis"],["dialogue","Banyak dialog"],["balanced","Seimbang"]]}/></div>
       <div className="builderCols"><SelectField label="Sudut pandang" value={data.pointOfView} field="pointOfView" options={[["first","Orang pertama"],["third_limited","Orang ketiga terbatas"],["third_omniscient","Orang ketiga serba tahu"],["multi","Berganti POV"]]}/><SelectField label="Target pembaca" value={data.audience} field="audience" options={[["anak","Anak-anak"],["remaja","Remaja"],["ya","Young Adult"],["dewasa","Dewasa"],["umum","Umum"]]}/></div>
-      <div className="builderCols"><SelectField label="Panjang novel" value={data.length} field="length" options={[["pendek","Pendek"],["sedang","Sedang"],["panjang","Panjang"],["sangat_panjang","Sangat panjang"]]}/><label className="builderField"><span>Target jumlah bab</span><input type="number" min="1" max="500" value={data.chapterTarget} onChange={e=>setField("chapterTarget",e.target.value)}/></label></div>
+      <div className="builderCols"><div><SelectField label="Panjang novel" value={data.length} field="length" options={[["pendek","Pendek"],["sedang","Sedang"],["panjang","Panjang"],["sangat_panjang","Sangat panjang"]]}/><small className="fieldHint">Panjang bab AI otomatis menyesuaikan genre dan skala novel.</small></div><label className="builderField"><span>Target jumlah bab</span><input type="number" min="1" max="500" value={data.chapterTarget} onChange={e=>setField("chapterTarget",e.target.value)}/></label></div>
       <div className="builderCols"><SelectField label="Ending" value={data.ending} field="ending" options={[["happy","Happy ending"],["sad","Sad ending"],["bittersweet","Bittersweet"],["open","Open ending"],["tragic","Tragic"],["not_set","Belum ditentukan"]]}/><SelectField label="Kebebasan AI" value={data.aiFreedom} field="aiFreedom" options={[["assistant","Pendamping — patuh pada konsep"],["co_writer","Co-writer — boleh mengembangkan"],["creative","Creative writer — lebih bebas"]]}/></div>
       <div className="lockBox"><div><b>Aturan AI</b><small>Pilih informasi yang harus dianggap sebagai canon.</small></div><div className="lockGrid">{[["premise","Premis"],["theme","Tema"],["tone","Tone"],["style","Gaya"],["pointOfView","POV"],["audience","Target pembaca"],["length","Panjang"],["chapterTarget","Jumlah bab"],["ending","Ending"]].map(([k,l])=><button type="button" key={k} className={data.locked.includes(k)?"lock active":"lock"} onClick={()=>toggleLock(k)}><span>{data.locked.includes(k)?"🔒":"○"}</span>{l}</button>)}</div><small className="lockHint">AI boleh mengembangkan detail yang tidak dikunci, tetapi tidak boleh mengubah canon yang dikunci.</small></div>
      </div></>}
@@ -266,7 +267,8 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [analysisBusy,setAnalysisBusy]=useState(false);
  const [qualityReport,setQualityReport]=useState<QualityReport|null>(()=>novel.qualityReport||null);
  const [focusMode,setFocusMode]=useState(false);
- const [wordGoal,setWordGoal]=useState(1000);
+ const chapterWordTarget=getChapterWordTarget(novel.genre,novel.builder?.length||"sedang");
+ const [wordGoal,setWordGoal]=useState(()=>Math.round((chapterWordTarget.min+chapterWordTarget.max)/2));
  const aiRequestSeq=useRef(0);
  const latestEditorRef=useRef({activeId,title,text});
  latestEditorRef.current={activeId,title,text};
@@ -590,7 +592,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     <div className="writingArea">
      <textarea value={text} onChange={e=>{setText(e.target.value);setDirty(true);setNotice("")}} placeholder="Mulai menulis cerita..."/>
      <div className="writingFooter">
-      <div className="writingMeta"><span>{wordCount.toLocaleString("id-ID")} / {wordGoal>0?wordGoal.toLocaleString("id-ID"):"—"} kata</span><span>Ctrl/Cmd + S untuk menyimpan • Esc untuk keluar Focus</span></div>
+      <div className="writingMeta"><span>{wordCount.toLocaleString("id-ID")} / {wordGoal>0?wordGoal.toLocaleString("id-ID"):"—"} kata</span><span>Target AI: {formatChapterTarget(chapterWordTarget)} • Ctrl/Cmd + S untuk menyimpan • Esc untuk keluar Focus</span></div>
       <div className="goalControl"><label>Target</label><input type="number" min="0" step="100" value={wordGoal} onChange={e=>setWordGoal(Math.max(0,Number(e.target.value)||0))}/><span>{wordGoal>0?wordGoalProgress+"%":"—"}</span></div>
      </div>
      <div className="goalTrack"><span style={{width:wordGoalProgress+"%"}}/></div>
