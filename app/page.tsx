@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import AuthPanel from "@/components/AuthPanel";
 import {useCloudSync} from "@/lib/useCloudSync";
+import {mergeMemoryFoundation,mergeStoryIntelligence,type MemoryStatus as EngineMemoryStatus} from "@/lib/memoryEngine";
 import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2,Maximize2,Minimize2,Download,FileArchive,FileJson,FileType} from "lucide-react";
 import JSZip from "jszip";
 import {jsPDF} from "jspdf";
@@ -18,7 +19,7 @@ type StoryThread={id:string;title:string;description:string;status:"open"|"resol
 type CharacterArc={character:string;arc:string;currentState?:string;turningPoints?:string[];lastChapter?:number};
 type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"character"|"timeline"|"world"|"plot"|"style";title:string;evidence:string;suggestion:string};
 type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string};
-type MemoryStatus="green"|"yellow"|"red";
+type MemoryStatus=EngineMemoryStatus;
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
 type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;cloudVersion?:number;deletedAt?:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];factMemory?:FactMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;chapterList?:Chapter[]};
 
@@ -36,24 +37,6 @@ const PAGE_KEY="novelis:page";
 const SELECTED_KEY="novelis:selected";
 
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
-function normalizeFactText(value:any){return String(value??"").toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]+/gi," ").trim();}
-function factTokens(value:any){return Array.from(new Set(normalizeFactText(value).split(/\s+/).filter(v=>v.length>=3)));}
-function factOverlap(a:any,b:any){const aa=factTokens(a);const bb=new Set(factTokens(b));if(!aa.length||!bb.size)return 0;return aa.filter(v=>bb.has(v)).length/aa.length;}
-function resolveReplacementFactId(incoming:any,facts:FactMemory[]){
- const direct=typeof incoming?.replacesId==="string"?incoming.replacesId.trim():"";
- if(direct&&facts.some(f=>f.id===direct))return direct;
- const subject=normalizeFactText(incoming?.replacesSubjectName);
- const oldStatement=String(incoming?.replacesStatement||"").trim();
- if(subject&&oldStatement){
-  const candidates=facts.filter(f=>f.status!=="superseded"&&normalizeFactText(f.subjectName)===subject).map(f=>({f,score:factOverlap(oldStatement,f.statement)})).sort((a,b)=>b.score-a.score);
-  if(candidates.length&&candidates[0].score>=0.5&&(!candidates[1]||candidates[0].score-candidates[1].score>=0.08))return candidates[0].f.id;
- }
- if(subject){
-  const candidates=facts.filter(f=>f.status!=="superseded"&&normalizeFactText(f.subjectName)===subject);
-  if(candidates.length===1)return candidates[0].id;
- }
- return "";
-}
 function nowIso(){return new Date().toISOString();}
 function getRelevantFacts(facts:FactMemory[],text:string,characters:CharacterMemory[]=[],entities:EntityMemory[]=[],limit=30){
  const active=facts.filter(f=>f.status!=="superseded");
@@ -391,36 +374,24 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const nextMemory=String(data.storyMemory||memory).trim();
    const incomingCharacters=Array.isArray(data.characters)?data.characters as CharacterMemory[]:[];
    const incomingEntities=Array.isArray(data.entities)?data.entities as EntityMemory[]:[];
-   const mergeByName=<T extends {id:string;name:string}>(existing:T[],incoming:T[])=>{
-    const map=new Map(existing.map(item=>[item.name.trim().toLowerCase(),item]));
-    incoming.forEach(item=>{
-     const key=item.name.trim().toLowerCase();if(!key)return;
-     const old=map.get(key);map.set(key,old?{...old,...item,id:old.id}:item);
-    });
-    return Array.from(map.values());
-   };
-   const nextCharacters=mergeByName(characterMemories,incomingCharacters);
-   const nextEntities=mergeByName(entityMemories,incomingEntities);
    const incomingFacts=Array.isArray(data.facts)?data.facts as FactMemory[]:[];
-   const factMap=new Map(factMemory.map(item=>[item.id,item]));
-   let unresolvedReplacement=false;
-   for(const incoming of incomingFacts){
-    const statement=String(incoming?.statement||"").trim();
-    if(!statement)continue;
-    const requestedReplacement=Boolean(incoming?.replacesId||incoming?.replacesSubjectName||incoming?.replacesStatement);
-    const replacesId=resolveReplacementFactId(incoming,factMemory);
-    const replacementUnresolved=requestedReplacement&&!replacesId;
-    if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
-    else if(replacementUnresolved)unresolvedReplacement=true;
-    const existing=incoming?.id?factMap.get(String(incoming.id)):undefined;
-    const id=existing?.id||String(incoming?.id||createId("fact"));
-    const status=replacementUnresolved?"uncertain":(incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active");
-    factMap.set(id,{...existing,...incoming,id,statement,status,firstChapter:Number(incoming.firstChapter||existing?.firstChapter||chapterNumber),lastChapter:Number(incoming.lastChapter||chapterNumber),replacesId});
-   }
-   const nextFacts=Array.from(factMap.values());
-   const aiStatus:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:"green";
-   const nextStatus:MemoryStatus=unresolvedReplacement?"red":aiStatus;
-   const nextNeedsUpdate=nextStatus!=="green";
+   const merged=mergeMemoryFoundation({
+    existingCharacters:characterMemories,
+    existingEntities:entityMemories,
+    existingFacts:factMemory,
+    incomingCharacters,
+    incomingEntities,
+    incomingFacts,
+    chapterNumber,
+    storyMemory:nextMemory,
+    memoryStatus:data.memoryStatus
+   });
+   const nextCharacters=merged.characters;
+   const nextEntities=merged.entities;
+   const nextFacts=merged.facts;
+   const nextStatus=merged.memoryStatus;
+   const nextNeedsUpdate=merged.memoryNeedsUpdate;
+   const unresolvedReplacement=merged.unresolvedReplacement;
    setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setFactMemory(nextFacts);setMemory(nextMemory);setMemoryNeedsUpdate(nextNeedsUpdate);setMemoryStatus(nextStatus);setMemoryStatusChapter(chapterNumber);
    setDirty(false);
    onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,factMemory:nextFacts,memoryNeedsUpdate:nextNeedsUpdate,memoryStatus:nextStatus,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
@@ -445,26 +416,20 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis Story Intelligence.");
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Story Intelligence dibatalkan karena naskah sudah berubah. Silakan jalankan analisis kembali.");
-   const mergeById=<T extends {id?:string}>(existing:T[],incoming:T[])=>{
-    const map=new Map(existing.map(item=>[String(item.id||JSON.stringify(item)),item]));
-    for(const item of incoming){
-     const key=String(item.id||JSON.stringify(item));
-     map.set(key,item);
-    }
-    return Array.from(map.values());
-   };
-   const mergeArcs=(existing:CharacterArc[],incoming:CharacterArc[])=>{
-    const map=new Map(existing.map(item=>[item.character.trim().toLowerCase(),item]));
-    for(const item of incoming){
-     const key=item.character.trim().toLowerCase();
-     if(key)map.set(key,item);
-    }
-    return Array.from(map.values());
-   };
-   const nextRelationships=Array.isArray(data.relationships)?mergeById(relationships,data.relationships as RelationshipMemory[]):relationships;
-   const nextTimeline=Array.isArray(data.timeline)?mergeById(timeline,data.timeline as TimelineEvent[]):timeline;
-   const nextThreads=Array.isArray(data.threads)?mergeById(storyThreads,data.threads as StoryThread[]):storyThreads;
-   const nextArcs=Array.isArray(data.arcs)?mergeArcs(characterArcs,data.arcs as CharacterArc[]):characterArcs;
+   const intelligence=mergeStoryIntelligence({
+    existingRelationships:relationships,
+    existingTimeline:timeline,
+    existingThreads:storyThreads,
+    existingArcs:characterArcs,
+    incomingRelationships:Array.isArray(data.relationships)?data.relationships as RelationshipMemory[]:[],
+    incomingTimeline:Array.isArray(data.timeline)?data.timeline as TimelineEvent[]:[],
+    incomingThreads:Array.isArray(data.threads)?data.threads as StoryThread[]:[],
+    incomingArcs:Array.isArray(data.arcs)?data.arcs as CharacterArc[]:[]
+   });
+   const nextRelationships=intelligence.relationships;
+   const nextTimeline=intelligence.timeline;
+   const nextThreads=intelligence.threads;
+   const nextArcs=intelligence.arcs;
    setRelationships(nextRelationships);setTimeline(nextTimeline);setStoryThreads(nextThreads);setCharacterArcs(nextArcs);
    onUpdate({...novel,relationshipsMemory:nextRelationships,timeline:nextTimeline,storyThreads:nextThreads,characterArcs:nextArcs,storyIntelligenceLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
    setNotice("Story Intelligence diperbarui");
