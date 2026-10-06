@@ -145,6 +145,8 @@ export function useCloudSync<T extends CloudNovel>(
         if(!user)return;
 
         for(const novel of changed){
+          const currentBeforeSave=novelsRef.current.find(item=>item.id===novel.id);
+          if(!currentBeforeSave||syncToken(currentBeforeSave)!==syncToken(novel))continue;
           const localUpdated=novel.updatedAt||new Date().toISOString();
           const {data:remote,error:remoteError}=await supabase
             .from("novels")
@@ -174,6 +176,25 @@ export function useCloudSync<T extends CloudNovel>(
           const result=Array.isArray(saveData)?saveData[0]:saveData;
           if(result?.status==="conflict"&&result?.data){
             const remoteNovel={...((result.data||{}) as T),id:novel.id,updatedAt:result.updated_at||((result.data as T)?.updatedAt),cloudVersion:Number(result.version||0)};
+            const currentLocal=novelsRef.current.find(item=>item.id===novel.id);
+            const localIsNewer=Boolean(currentLocal&&Date.parse(currentLocal.updatedAt||"")>Date.parse(remoteNovel.updatedAt||""));
+            if(localIsNewer&&currentLocal){
+              const retry=await supabase.rpc("save_novel_atomic",{
+                p_novel_id:currentLocal.id,
+                p_data:currentLocal,
+                p_expected_version:Number(remoteNovel.cloudVersion||0),
+                p_client_updated_at:currentLocal.updatedAt||new Date().toISOString()
+              });
+              if(retry.error)throw retry.error;
+              const retryResult=Array.isArray(retry.data)?retry.data[0]:retry.data;
+              if(retryResult?.status==="saved"){
+                const savedNovel={...currentLocal,updatedAt:retryResult.updated_at||currentLocal.updatedAt,cloudVersion:Number(retryResult.version||Number(remoteNovel.cloudVersion||0)+1)} as T;
+                setNovels(current=>current.map(item=>item.id===savedNovel.id?savedNovel:item));
+                novelsRef.current=novelsRef.current.map(item=>item.id===savedNovel.id?savedNovel:item);
+                lastUploadRef.current.set(savedNovel.id,syncToken(savedNovel));
+                continue;
+              }
+            }
             setNovels(current=>current.map(item=>item.id===novel.id?remoteNovel:item));
             novelsRef.current=novelsRef.current.map(item=>item.id===novel.id?remoteNovel:item);
             lastUploadRef.current.set(novel.id,syncToken(remoteNovel));
@@ -181,9 +202,12 @@ export function useCloudSync<T extends CloudNovel>(
           }
           if(result?.status!=="saved")throw new Error("Cloud save was not committed.");
           const savedNovel={...novel,updatedAt:result.updated_at||localUpdated,cloudVersion:Number(result.version||expectedVersion+1)} as T;
-          setNovels(current=>current.map(item=>item.id===novel.id?savedNovel:item));
-          novelsRef.current=novelsRef.current.map(item=>item.id===novel.id?savedNovel:item);
-          lastUploadRef.current.set(novel.id,syncToken(savedNovel));
+          const currentAfterSave=novelsRef.current.find(item=>item.id===novel.id);
+          if(currentAfterSave&&syncToken(currentAfterSave)===syncToken(novel)){
+            setNovels(current=>current.map(item=>item.id===novel.id?savedNovel:item));
+            novelsRef.current=novelsRef.current.map(item=>item.id===novel.id?savedNovel:item);
+            lastUploadRef.current.set(novel.id,syncToken(savedNovel));
+          }
         }
       }catch(error){
         console.error("Novelis cloud save failed",error);
