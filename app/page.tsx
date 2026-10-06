@@ -36,8 +36,8 @@ const PAGE_KEY="novelis:page";
 const SELECTED_KEY="novelis:selected";
 
 function createId(prefix="id"){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;}
-function normalizeFactText(value:any){return String(value??"").toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]+/gi," ").trim();}
-function factTokens(value:any){return Array.from(new Set(normalizeFactText(value).split(/\s+/).filter(v=>v.length>=3)));}
+function normalizeFactText(value:any){return String(value??"").toLowerCase().replace(/[^a-z0-9\\u00C0-\\u024F]+/gi," ").trim();}
+function factTokens(value:any){return Array.from(new Set(normalizeFactText(value).split(/\\s+/).filter(v=>v.length>=3)));}
 function factOverlap(a:any,b:any){const aa=factTokens(a);const bb=new Set(factTokens(b));if(!aa.length||!bb.size)return 0;return aa.filter(v=>bb.has(v)).length/aa.length;}
 function resolveReplacementFactId(incoming:any,facts:FactMemory[]){
  const direct=typeof incoming?.replacesId==="string"?incoming.replacesId.trim():"";
@@ -403,28 +403,23 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const nextEntities=mergeByName(entityMemories,incomingEntities);
    const incomingFacts=Array.isArray(data.facts)?data.facts as FactMemory[]:[];
    const factMap=new Map(factMemory.map(item=>[item.id,item]));
-   let unresolvedReplacement=false;
    for(const incoming of incomingFacts){
     const statement=String(incoming?.statement||"").trim();
     if(!statement)continue;
-    const requestedReplacement=Boolean(incoming?.replacesId||incoming?.replacesSubjectName||incoming?.replacesStatement);
     const replacesId=resolveReplacementFactId(incoming,factMemory);
-    const replacementUnresolved=requestedReplacement&&!replacesId;
     if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
-    else if(replacementUnresolved)unresolvedReplacement=true;
     const existing=incoming?.id?factMap.get(String(incoming.id)):undefined;
     const id=existing?.id||String(incoming?.id||createId("fact"));
-    const status=replacementUnresolved?"uncertain":(incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active");
+    const status=incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active";
     factMap.set(id,{...existing,...incoming,id,statement,status,firstChapter:Number(incoming.firstChapter||existing?.firstChapter||chapterNumber),lastChapter:Number(incoming.lastChapter||chapterNumber),replacesId});
    }
    const nextFacts=Array.from(factMap.values());
-   const aiStatus:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:"green";
-   const nextStatus:MemoryStatus=unresolvedReplacement?"red":aiStatus;
+   const nextStatus:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:"green";
    const nextNeedsUpdate=nextStatus!=="green";
    setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setFactMemory(nextFacts);setMemory(nextMemory);setMemoryNeedsUpdate(nextNeedsUpdate);setMemoryStatus(nextStatus);setMemoryStatusChapter(chapterNumber);
    setDirty(false);
    onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,factMemory:nextFacts,memoryNeedsUpdate:nextNeedsUpdate,memoryStatus:nextStatus,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
-   setNotice(`Ringkasan + Memory Foundation diperbarui • status ${nextStatus==="green"?"hijau":nextStatus==="yellow"?"kuning":"merah"}${unresolvedReplacement?" • ada fakta pengganti yang belum dapat dipetakan dengan aman":""}`);
+   setNotice(`Ringkasan + Memory Foundation diperbarui • status ${nextStatus==="green"?"hijau":nextStatus==="yellow"?"kuning":"merah"}`);
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
  };
 
