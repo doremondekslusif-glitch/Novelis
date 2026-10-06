@@ -311,6 +311,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis memori cerita.");
    const updatedChapters:Chapter[]=chapters.map(c=>c.id===activeId?{...c,title:title.trim()||`Bab ${chapterNumber}`,content:text,status:(text.trim().length>80?"Selesai":"Draft") as Chapter["status"],summary:String(data.summary||"").trim()}:c);
+   const nextMemory=String(data.storyMemory||memory).trim();
    const incomingCharacters=Array.isArray(data.characters)?data.characters as CharacterMemory[]:[];
    const incomingEntities=Array.isArray(data.entities)?data.entities as EntityMemory[]:[];
    const mergeByName=<T extends {id:string;name:string}>(existing:T[],incoming:T[])=>{
@@ -325,10 +326,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    const nextEntities=mergeByName(entityMemories,incomingEntities);
    const needsUpdate=Boolean(data.memoryNeedsUpdate);
    const status:MemoryStatus=data.memoryStatus==="red"||data.memoryStatus==="yellow"||data.memoryStatus==="green"?data.memoryStatus:(needsUpdate?"yellow":"green");
-   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setMemoryNeedsUpdate(needsUpdate);setMemoryStatus(status);setMemoryStatusChapter(chapterNumber);
+   setChapters(updatedChapters);setCharacterMemories(nextCharacters);setEntityMemories(nextEntities);setMemory(nextMemory);setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
    setDirty(false);
-   onUpdate({...novel,memory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,memoryNeedsUpdate:needsUpdate,memoryStatus:status,memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
-   setNotice(needsUpdate?"Ringkasan tersimpan • ada perkembangan untuk Story Memory":"Ringkasan dan Memory Foundation diperbarui");
+   onUpdate({...novel,memory:nextMemory,charactersMemory:nextCharacters,entitiesMemory:nextEntities,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:updatedChapters,chapters:updatedChapters.length,updated:"Baru saja"});
+   setNotice(needsUpdate?"Ringkasan + Story Memory diperbarui":"Ringkasan + Memory Foundation diperbarui");
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menganalisis memori cerita.")}finally{setSummaryBusy(false)}
  };
 
@@ -439,10 +440,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     </div>
     {generateError&&<div className="generateError">⚠ {generateError}</div>}
     <div className="memoryPanel">
-     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY <span className={"memoryStatusDot "+memoryStatus}>● {memoryStatus==="green"?"HIJAU":memoryStatus==="yellow"?"KUNING":"MERAH"}</span></span><small>🟢 Tidak ada perubahan penting • 🟡 Ada perkembangan • 🔴 Ada perubahan besar atau risiko konflik. Ringkas Bab menentukan status; update mengembalikan status ke hijau.</small></div><button className="secondary mini" onClick={runMemory} disabled={memoryBusy||memoryStatus==="green"||!text.trim()}>{memoryBusy?<><Loader2 size={13} className="spin"/> Membangun...</>:<><Sparkles size={13}/> {memoryStatus==="red"?"Update Memory • Penting":memoryStatus==="yellow"?"Update Story Memory":"Memory sudah mutakhir"}</>}</button></div>
-     {memoryStatus==="yellow"&&<div className="memoryAlert yellow">{memoryStatusChapter?"🟡 Ada perkembangan cerita yang perlu dipertimbangkan untuk Story Memory.":"🟡 Story Memory belum dianalisis. Ringkas & Analisis bab ini untuk menentukan apakah ada perubahan penting."}</div>}
-     {memoryStatus==="red"&&<div className="memoryAlert red">🔴 Ada perubahan besar atau potensi konflik dengan Story Memory. Sebaiknya perbarui sebelum melanjutkan bab berikutnya.</div>}
-     {memoryStatus==="green"&&<div className="memoryAlert green">🟢 Story Memory dianggap mutakhir berdasarkan analisis terakhir{memoryStatusChapter?` (Bab ${memoryStatusChapter}).`:"."}</div>}
+     <div className="memoryHead"><div><span className="memoryTitle"><BookMarked size={15}/> STORY MEMORY <span className={"memoryStatusDot "+memoryStatus}>● {memoryStatus==="green"?"HIJAU":memoryStatus==="yellow"?"KUNING":"MERAH"}</span></span><small>🟢 Tidak ada perubahan penting • 🟡 Ada perkembangan • 🔴 Ada perubahan besar atau risiko konflik. Ringkas Bab menentukan status; update mengembalikan status ke hijau.</small></div><span className="memoryAutoBadge"><Sparkles size={13}/> Otomatis saat Ringkas & Analisis</span></div>
+     {memoryStatus==="yellow"&&<div className="memoryAlert yellow">{memoryStatusChapter?"🟡 Ada perkembangan cerita yang sudah dimasukkan ke Story Memory saat proses Ringkas & Analisis.":"🟡 Story Memory belum dianalisis. Ringkas & Analisis bab ini untuk menentukan apakah ada perubahan penting."}</div>}
+     {memoryStatus==="red"&&<div className="memoryAlert red">🔴 Ada perubahan besar atau potensi konflik yang sudah dimasukkan ke Story Memory saat proses Ringkas & Analisis.</div>}
+     {memoryStatus==="green"&&<div className="memoryAlert green">🟢 Story Memory sudah diperbarui dan menjadi versi aktif terbaru{memoryStatusChapter?` (Bab ${memoryStatusChapter}).`:"."}</div>}
      <textarea className="memoryInput" value={memory} onChange={e=>setMemory(e.target.value)} placeholder="Belum ada Story Memory. Klik “Update Story Memory” untuk membuatnya, atau tulis sendiri."/>
      <div className="memoryFoot"><span>{memory.trim()?memory.trim().length+" karakter tersimpan":"Memory kosong"} • {characterMemories.length} karakter • {entityMemories.length} entitas</span><button className="textBtn" onClick={saveMemory}>Simpan Memory</button></div>
     </div>
