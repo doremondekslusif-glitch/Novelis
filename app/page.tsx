@@ -211,7 +211,14 @@ function SectionStudio({page,novels,selected,onSelect,onBack,onOpenNovel}:{page:
  return <div className="sectionStudio"><button className="back" onClick={onBack}><ArrowLeft size={17}/> Semua Novel</button><div className="sectionIntro compact"><span className="pill light"><Globe2 size={13}/> DUNIA CERITA</span><h2>{selected.title}</h2><p>{selected.entitiesMemory?.length||0} entitas tersimpan di dunia novel ini.</p></div><div className="memoryDirectory">{(selected.entitiesMemory||[]).length===0?<div className="directoryEmpty">Belum ada entitas yang terdeteksi. Gunakan Ringkas & Analisis setelah menulis bab untuk membangun Entity Memory.</div>:(selected.entitiesMemory||[]).map(e=><div className="memoryCard" key={e.id}><div className="memoryAvatar"><Globe2 size={18}/></div><div><b>{e.name}</b><span>{e.type==="location"?"Lokasi":e.type==="object"?"Benda":e.type==="organization"?"Organisasi":"Entitas lain"}</span><p>{e.description||e.facts?.[0]||"Belum ada deskripsi."}</p><small>{e.firstChapter?"Pertama muncul Bab "+e.firstChapter:"Belum diketahui"}{e.lastChapter&&e.lastChapter!==e.firstChapter?" • Terakhir dianalisis Bab "+e.lastChapter:""}</small></div></div>)}</div></div>;
 }
 
-function ProjectDownloadModal({novel,onClose}:{novel:Novel;onClose:()=>void}){const [busy,setBusy]=useState(false);const run=async(kind:"zip"|"json"|"txt"|"md")=>{setBusy(true);try{if(kind==="zip")await exportProjectZip(novel);if(kind==="json")exportProjectJson(novel);if(kind==="txt")exportProjectTxt(novel);if(kind==="md")exportProjectMarkdown(novel);onClose()}finally{setBusy(false)}};return <div className="modalWrap" onMouseDown={e=>e.target===e.currentTarget&&!busy&&onClose()}><div className="exportModal"><div className="modalHead"><div><span className="pill"><Download size={13}/> UNDUH PROYEK</span><h2>{novel.title}</h2><p>Backup data proyek atau naskah dalam format yang mudah dibuka kembali.</p></div><button className="close" onClick={onClose} disabled={busy}><X size={20}/></button></div><div className="exportGrid"><button onClick={()=>run("zip")}><FileArchive size={21}/><b>ZIP</b><span>Seluruh data novel, bab, dan naskah.</span></button><button onClick={()=>run("json")}><FileJson size={21}/><b>JSON</b><span>Data proyek lengkap untuk backup.</span></button><button onClick={()=>run("txt")}><FileText size={21}/><b>TXT</b><span>Seluruh naskah sebagai teks.</span></button><button onClick={()=>run("md")}><FileType size={21}/><b>Markdown</b><span>Naskah dengan struktur judul bab.</span></button></div>{busy&&<div className="exportBusy"><Loader2 size={15} className="spin"/> Menyiapkan unduhan…</div>}</div></div>}function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;onUpdate:(n:Novel)=>void;onStart:()=>void}){
+function ProjectDownloadModal({novel,onClose}:{novel:Novel;onClose:()=>void}){const [busy,setBusy]=useState(false);const run=async(kind:"zip"|"json"|"txt"|"md")=>{setBusy(true);try{if(kind==="zip")await exportProjectZip(novel);if(kind==="json")exportProjectJson(novel);if(kind==="txt")exportProjectTxt(novel);if(kind==="md")exportProjectMarkdown(novel);onClose()}finally{setBusy(false)}};return <div className="modalWrap" onMouseDown={e=>e.target===e.currentTarget&&!busy&&onClose()}><div className="exportModal"><div className="modalHead"><div><span className="pill"><Download size={13}/> UNDUH PROYEK</span><h2>{novel.title}</h2><p>Backup data proyek atau naskah dalam format yang mudah dibuka kembali.</p></div><button className="close" onClick={onClose} disabled={busy}><X size={20}/></button></div><div className="exportGrid"><button onClick={()=>run("zip")}><FileArchive size={21}/><b>ZIP</b><span>Seluruh data novel, bab, dan naskah.</span></button><button onClick={()=>run("json")}><FileJson size={21}/><b>JSON</b><span>Data proyek lengkap untuk backup.</span></button><button onClick={()=>run("txt")}><FileText size={21}/><b>TXT</b><span>Seluruh naskah sebagai teks.</span></button><button onClick={()=>run("md")}><FileType size={21}/><b>Markdown</b><span>Naskah dengan struktur judul bab.</span></button></div>{busy&&<div className="exportBusy"><Loader2 size={15} className="spin"/> Menyiapkan unduhan…</div>}</div></div>}async function contentHash(...parts:string[]){
+ const data=parts.join("\u001f");
+ const bytes=new TextEncoder().encode(data);
+ const digest=await crypto.subtle.digest("SHA-256",bytes);
+ return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("");
+}
+
+function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;onUpdate:(n:Novel)=>void;onStart:()=>void}){
  const [step,setStep]=useState(1);const [data,setData]=useState<BuilderData>({...emptyBuilder,...novel.builder});const [saved,setSaved]=useState(true);
  const labels=["Konsep & Arah","Karakter Utama","Dunia Cerita","Outline Bab"];
  const setField=(key:keyof BuilderData,value:string)=>{setData(d=>({...d,[key]:value}));setSaved(false)};
@@ -273,7 +280,12 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const chapterSummaries=chapters.map((c,i)=>({chapterNumber:i+1,chapter:c})).filter(item=>item.chapter.summary?.trim()).map(item=>`Bab ${item.chapterNumber} — ${item.chapter.title}: ${item.chapter.summary}`).join("\n");
  const relevantFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,30);
  const qualityFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,60);
- const qualityVersion=`${activeId}:${title}:${text.length}:${text.slice(-120)}`;
+ const [qualityVersion,setQualityVersion]=useState("");
+ useEffect(()=>{
+  let cancelled=false;
+  contentHash(activeId,title,text).then(hash=>{if(!cancelled)setQualityVersion(hash)}).catch(()=>{if(!cancelled)setQualityVersion("")});
+  return()=>{cancelled=true};
+ },[activeId,title,text]);
  const displayQualityReport=qualityReport&&qualityReport.checkedChapter===chapterNumber&&qualityReport.checkedVersion===qualityVersion?qualityReport:null;
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
@@ -367,7 +379,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory},
     chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapterId:activeId,
-    chapterVersion:qualityVersion,
+    chapterVersion:await contentHash(activeId,title,text),
     chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis memori cerita.");
@@ -413,7 +425,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
     chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapterId:activeId,
-    chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
+    chapterVersion:await contentHash(activeId,title,text),
     chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis Story Intelligence.");
@@ -450,14 +462,27 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
     chapter:{id:activeId,title:title.trim()||"Bab "+chapterNumber,content:text,number:chapterNumber},
     chapterId:activeId,
-    chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
+    chapterVersion:await contentHash(activeId,title,text),
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content}:null,
     chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menjalankan Quality Control.");
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Quality Control dibatalkan karena naskah sudah berubah. Silakan jalankan pemeriksaan kembali.");
-   const issues=Array.isArray(data.issues)?data.issues as QualityIssue[]:[];
-   const report:QualityReport={overall:data.overall==="clear"?"clear":"review",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID"),checkedVersion:qualityVersion};
+   const allowedSeverities=new Set<QualityIssue["severity"]>(["high","medium","low"]);
+   const allowedCategories=new Set<QualityIssue["category"]>(["continuity","character","timeline","world","plot","style"]);
+   const issues:QualityIssue[]=Array.isArray(data.issues)?data.issues
+    .filter((item:any)=>item&&typeof item==="object")
+    .map((item:any)=>({
+      severity:allowedSeverities.has(item.severity)?item.severity:"low",
+      category:allowedCategories.has(item.category)?item.category:"continuity",
+      title:String(item.title||"").trim().slice(0,300),
+      evidence:String(item.evidence||"").trim().slice(0,1200),
+      suggestion:String(item.suggestion||"").trim().slice(0,1200)
+    }))
+    .filter((item:QualityIssue)=>Boolean(item.title&&item.evidence&&item.suggestion))
+    .slice(0,8):[];
+   const checkedVersion=await contentHash(activeId,title,text);
+   const report:QualityReport={overall:issues.some(item=>item.severity==="high"||item.severity==="medium")?"review":"clear",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID"),checkedVersion};
    setQualityReport(report);
    onUpdate({...novel,qualityReport:report,chapterList:chapters,chapters:chapters.length,updatedAt:nowIso(),updated:"Baru saja"});
    setNotice(issues.length?"Quality Control menemukan "+issues.length+" hal untuk ditinjau":"Quality Control: tidak menemukan masalah penting");
