@@ -166,9 +166,22 @@ export function buildContext(
     ? novel.builder.locked.map((v:any)=>text(v)).filter(Boolean)
     : [];
 
-  const factsRanked = rank(Array.isArray(novel?.factMemory)?novel.factMemory:[],query,currentChapter,limits.facts);
+  const allFacts=Array.isArray(novel?.factMemory)?novel.factMemory:[];
+  let factsRanked = rank(allFacts,query,currentChapter,limits.facts);
   const charsRanked = rank(Array.isArray(novel?.charactersMemory)?novel.charactersMemory:[],query,currentChapter,limits.characters);
   const entitiesRanked = rank(Array.isArray(novel?.entitiesMemory)?novel.entitiesMemory:[],query,currentChapter,limits.entities);
+  if(action==="memoryFoundation"){
+    const relevantSubjects=new Set([...charsRanked.map(x=>lower(x.item.name)),...entitiesRanked.map(x=>lower(x.item.name)),...factsRanked.map(x=>lower(x.item.subjectName))].filter(Boolean));
+    const selected=new Map(factsRanked.map(x=>[String(x.item.id||JSON.stringify(x.item)),x]));
+    allFacts.filter((item:any)=>item.status!=="superseded"&&relevantSubjects.has(lower(item.subjectName)))
+      .sort((a:any,b:any)=>Number(b.lastChapter||0)-Number(a.lastChapter||0))
+      .slice(0,120)
+      .forEach((item:any)=>{
+        const key=String(item.id||JSON.stringify(item));
+        if(!selected.has(key))selected.set(key,{item,score:0,reason:"subject history"});
+      });
+    factsRanked=Array.from(selected.values());
+  }
   const relRanked = rank(Array.isArray(novel?.relationshipsMemory)?novel.relationshipsMemory:[],query,currentChapter,limits.relationships);
   const timelineRanked = rank(Array.isArray(novel?.timeline)?novel.timeline:[],query,currentChapter,limits.timeline);
   const threadsRanked = rank(Array.isArray(novel?.storyThreads)?novel.storyThreads:[],query,currentChapter,limits.threads);
