@@ -261,8 +261,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const active=useMemo(()=>chapters.find(c=>c.id===activeId)||chapters[0],[chapters,activeId]);
  const chapterNumber=chapters.findIndex(c=>c.id===activeId)+1;
  const previousChapter=chapterNumber>1?chapters[chapterNumber-2]:null;
- const chapterSummaries=chapters.filter(c=>c.summary?.trim()).map((c,i)=>`Bab ${i+1} — ${c.title}: ${c.summary}`).join("\n");
- const relevantFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories);
+ const chapterSummaries=chapters.map((c,i)=>({chapterNumber:i+1,chapter:c})).filter(item=>item.chapter.summary?.trim()).map(item=>`Bab ${item.chapterNumber} — ${item.chapter.title}: ${item.chapter.summary}`).join("\n");
+ const relevantFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,30);
+ const qualityFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,60);
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
@@ -374,7 +375,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action:"storyIntelligence",
-    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:relevantFacts,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
+    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:qualityFacts,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
