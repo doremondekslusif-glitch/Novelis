@@ -472,21 +472,6 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal menjalankan Quality Control.")}finally{setQualityBusy(false)}
  };
 
- const runMemory=async()=>{
-  if(memoryBusy)return;
-  setMemoryBusy(true);setGenerateError("");setNotice("");
-  try{
-   const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action:"memory",novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory},chapter:{title:title,content:text,number:chapterNumber},chapters:chapters.map(c=>({title:c.title,content:c.content,summary:c.summary}))
-   })});
-   const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal membangun Story Memory.");
-   const nextMemory=(data.text||"").trim();if(!nextMemory)throw new Error("AI tidak menghasilkan Story Memory.");
-   setMemory(nextMemory);
-   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,relationshipsMemory:relationships,timeline,storyThreads,characterArcs,memoryNeedsUpdate:false,memoryStatus:"green",memoryStatusChapter:chapterNumber,memoryLastAnalyzedChapter:chapterNumber,chapterList:chapters,chapters:chapters.length,updated:"Baru saja"});
-   setMemoryNeedsUpdate(false);setMemoryStatus("green");setMemoryStatusChapter(chapterNumber);
-   setNotice("Story Memory diperbarui • status kembali hijau");
-  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal membangun Story Memory.")}finally{setMemoryBusy(false)}
- };
 
  const saveMemory=()=>{
   const nextMemory=memory.trim();
