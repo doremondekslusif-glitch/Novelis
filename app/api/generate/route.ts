@@ -1,5 +1,6 @@
 import {NextResponse} from "next/server";
 import {buildContext,contextForPrompt} from "@/lib/contextEngine";
+import {executeAI,aiModel,type AIAction} from "@/lib/aiEngine";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -136,102 +137,53 @@ export async function POST(request:Request){
    currentText ? "TEKS BAB SEKARANG:\n"+currentText : ""
   ].filter(Boolean).join("\n\n");
 
-  let response:Response|null=null;
-  let result:any=null;
-  let lastError="";
-  let geminiStatus=0;
-
-  for(let attempt=0;attempt<2;attempt++){
-   try{
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),50000);
-    try{
-     response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-      body:JSON.stringify({
-       contents:[{role:"user",parts:[{text:prompt}]}],
-       generationConfig:{thinkingConfig:{thinkingLevel:"low"},responseMimeType:["memoryFoundation","storyIntelligence","qualityControl"].includes(action)?"application/json":"text/plain"}
-      }),
-      signal:controller.signal
-     });
-     result=await response.json();
-    }finally{
-     clearTimeout(timeout);
-    }
-
-    if(response.ok)break;
-
-    geminiStatus=response.status;
-    lastError=result?.error?.message||`Gemini gagal menghasilkan cerita (HTTP ${response.status}).`;
-    // Jangan otomatis mengulang 429. Rate-limit/quota errors adalah kondisi
-    // yang tidak akan pulih hanya dengan request kedua dan retry justru bisa
-    // menambah konsumsi kuota. Retry hanya untuk gangguan sementara 408/503.
-    const retryable=response.status===503||response.status===408;
-    if(retryable&&attempt<1){
-     const retryAfter=Number(response.headers.get("retry-after")||0);
-     const delay=retryAfter>0?Math.min(retryAfter*1000,8000):2000;
-     await new Promise(resolve=>setTimeout(resolve,delay));
-     continue;
-    }
-    break;
-   }catch(error){
-    lastError=error instanceof Error&&error.name==="AbortError"?"Gemini terlalu lama merespons.":error instanceof Error?error.message:"Koneksi ke Gemini gagal.";
-    break;
+  const requestId=typeof body?.requestId==="string"&&body.requestId.trim()?body.requestId.trim():undefined;
+  const aiRequest={
+   requestId,
+   novelId:typeof body?.novelId==="string"?body.novelId:typeof novel?.id==="string"?novel.id:undefined,
+   chapterId:typeof body?.chapterId==="string"?body.chapterId:typeof chapter?.id==="string"?chapter.id:undefined,
+   action:action as AIAction,
+   chapterVersion:body?.chapterVersion,
+   prompt,
+   options:{
+    model:typeof body?.model==="string"&&body.model.trim()?body.model.trim():aiModel(),
+    timeoutMs:50000,
+    maxRetries:1
    }
-  }
+  };
 
-  if(!response?.ok){
-   const timeoutError=lastError==="Gemini terlalu lama merespons.";
-   const status=timeoutError?504:geminiStatus===429?429:(geminiStatus>=500?503:502);
-   const errorInfo=classifyGeminiError(geminiStatus,lastError,result?.error);
-   return NextResponse.json({error:errorInfo.message,code:errorInfo.code,limitType:errorInfo.limitType,detail:lastError,status:geminiStatus||null},{status});
-  }
-
-  const text=result?.candidates?.[0]?.content?.parts
-   ?.filter((part:{text?:string})=>typeof part.text==="string")
-   ?.map((part:{text?:string})=>part.text||"")
-   .join("")
-   .trim();
-
-  if(!text){
-   return NextResponse.json({error:"Gemini tidak mengembalikan teks cerita."},{status:502});
-  }
-
-  if(action==="qualityControl"){
-   try{
-    const cleaned=text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim();
-    const parsed=JSON.parse(cleaned);
-    const issues=Array.isArray(parsed.issues)?parsed.issues.slice(0,8).map((item:any)=>({severity:item?.severity==="high"||item?.severity==="medium"||item?.severity==="low"?item.severity:"low",category:typeof item?.category==="string"?item.category:"continuity",title:typeof item?.title==="string"?item.title:"Catatan kontinuitas",evidence:typeof item?.evidence==="string"?item.evidence:"",suggestion:typeof item?.suggestion==="string"?item.suggestion:"Tinjau bagian ini."})):[];
-    return NextResponse.json({overall:issues.some((item:any)=>item.severity==="high"||item.severity==="medium")?"review":"clear",issues});
-   }catch{return NextResponse.json({error:"Gemini mengembalikan format Quality Control yang tidak valid."},{status:502});}
-  }
-  if(action==="storyIntelligence"){
-   try{
-    const parsed=JSON.parse(text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim());
-    return NextResponse.json({relationships:Array.isArray(parsed.relationships)?parsed.relationships:[],timeline:Array.isArray(parsed.timeline)?parsed.timeline:[],threads:Array.isArray(parsed.threads)?parsed.threads:[],arcs:Array.isArray(parsed.arcs)?parsed.arcs:[]});
-   }catch{return NextResponse.json({error:"Gemini mengembalikan format Story Intelligence yang tidak valid."},{status:502});}
-  }
-
-  if(action==="memoryFoundation"){
-   try{
-    const parsed=JSON.parse(text.replace(/^```json\s*/,"").replace(/\s*```$/,"").trim());
-    const memoryStatus=parsed.memoryStatus==="red"||parsed.memoryStatus==="yellow"||parsed.memoryStatus==="green"?parsed.memoryStatus:(parsed.memoryNeedsUpdate?"yellow":"green");
+  try{
+   const result=await executeAI(aiRequest);
+   if(!result.content)throw new Error("AI tidak mengembalikan teks.");
+   if(result.structured!==null){
     return NextResponse.json({
-     summary:typeof parsed.summary==="string"?parsed.summary:"",
-     storyMemory:typeof parsed.storyMemory==="string"?parsed.storyMemory:"",
-     characters:Array.isArray(parsed.characters)?parsed.characters:[],
-     entities:Array.isArray(parsed.entities)?parsed.entities:[],
-     facts:Array.isArray(parsed.facts)?parsed.facts:[],
-     memoryStatus,
-     memoryNeedsUpdate:memoryStatus!=="green"
+     ...result.structured,
+     text:result.content,
+     requestId:result.requestId,
+     action:result.action,
+     model:result.model,
+     durationMs:result.durationMs,
+     usage:result.usage
     });
-   }catch{
-    return NextResponse.json({error:"Gemini mengembalikan format Memory Foundation yang tidak valid."},{status:502});
    }
+   return NextResponse.json({
+    text:result.content,
+    requestId:result.requestId,
+    action:result.action,
+    model:result.model,
+    durationMs:result.durationMs,
+    usage:result.usage
+   });
+  }catch(error){
+   const err=error as any;
+   return NextResponse.json({
+    error:err?.message||"AI gagal memproses permintaan.",
+    code:err?.code||"AI_ERROR",
+    limitType:err?.limitType||null,
+    requestId:err?.requestId||requestId||null,
+    status:err?.geminiStatus||null
+   },{status:Number(err?.status)||502});
   }
-
-  return NextResponse.json({text});
  }catch(error){
   return NextResponse.json({
    error:error instanceof Error?error.message:"Terjadi kesalahan saat generate."
