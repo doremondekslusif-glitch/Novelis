@@ -312,10 +312,15 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
 
  const runAI=async(action:"generate"|"continue"|"improve"|"dialog"|"description")=>{
   if(generating)return;
+  const requestId=`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+  const chapterVersion=`${activeId}:${title}:${text.length}:${text.slice(-120)}`;
   setGenerating(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action,
+    requestId,
+    chapterId:activeId,
+    chapterVersion,
     novel:{
      title:novel.title,
      genre:novel.genre,
@@ -334,6 +339,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
+   if(chapterVersion!==`${activeId}:${title}:${text.length}:${text.slice(-120)}`)throw new Error("Hasil AI dibatalkan karena bab berubah saat AI sedang bekerja. Jalankan AI lagi pada versi terbaru.");
    const generated=(data.text||"").trim();if(!generated)throw new Error("AI tidak menghasilkan teks.");
    if(action==="generate"||action==="continue")setText(text.trim()?text.trim()+"\n\n"+generated:generated);
    else setText(generated);
