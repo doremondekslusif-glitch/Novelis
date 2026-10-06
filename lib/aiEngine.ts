@@ -75,34 +75,56 @@ function cleanJson(value:string){
  return value.replace(/^\s*\`\`\`json\s*/i,"").replace(/\s*\`\`\`\s*$/,"").trim();
 }
 
+function cleanString(value:unknown,max=4000){
+ const valueText=String(value??"").trim();
+ return valueText.slice(0,max);
+}
+
+const QUALITY_SEVERITIES=["high","medium","low"] as const;
+const QUALITY_CATEGORIES=["continuity","character","timeline","world","plot","style"] as const;
+
+function normalizeQualityIssue(value:any){
+ if(!value||typeof value!=="object")return null;
+ const severity=QUALITY_SEVERITIES.includes(value.severity)?value.severity:"low";
+ const category=QUALITY_CATEGORIES.includes(value.category)?value.category:"continuity";
+ const title=cleanString(value.title,300);
+ const evidence=cleanString(value.evidence,1200);
+ const suggestion=cleanString(value.suggestion,1200);
+ if(!title||!evidence||!suggestion)return null;
+ return {severity,category,title,evidence,suggestion};
+}
+
 function parseStructured(action:AIAction,text:string){
  if(!["memoryFoundation","storyIntelligence","qualityControl"].includes(action))return null;
  try{
   const parsed=JSON.parse(cleanJson(text));
+  if(!parsed||typeof parsed!=="object")return null;
   if(action==="qualityControl"){
-   const issues=Array.isArray(parsed.issues)?parsed.issues.slice(0,8):[];
+   const issues=Array.isArray(parsed.issues)
+    ?parsed.issues.map(normalizeQualityIssue).filter(Boolean).slice(0,8)
+    :[];
    return {
-    overall:issues.some((item:any)=>item?.severity==="high"||item?.severity==="medium")?"review":"clear",
+    overall:issues.some((item:any)=>item.severity==="high"||item.severity==="medium")?"review":"clear",
     issues
    };
   }
   if(action==="storyIntelligence"){
    return {
-    relationships:Array.isArray(parsed.relationships)?parsed.relationships:[],
-    timeline:Array.isArray(parsed.timeline)?parsed.timeline:[],
-    threads:Array.isArray(parsed.threads)?parsed.threads:[],
-    arcs:Array.isArray(parsed.arcs)?parsed.arcs:[]
+    relationships:Array.isArray(parsed.relationships)?parsed.relationships.filter((item:any)=>item&&typeof item==="object"):[],
+    timeline:Array.isArray(parsed.timeline)?parsed.timeline.filter((item:any)=>item&&typeof item==="object"):[],
+    threads:Array.isArray(parsed.threads)?parsed.threads.filter((item:any)=>item&&typeof item==="object"):[],
+    arcs:Array.isArray(parsed.arcs)?parsed.arcs.filter((item:any)=>item&&typeof item==="object"):[]
    };
   }
   const memoryStatus=parsed.memoryStatus==="red"||parsed.memoryStatus==="yellow"||parsed.memoryStatus==="green"
    ?parsed.memoryStatus
    :(parsed.memoryNeedsUpdate?"yellow":"green");
   return {
-   summary:typeof parsed.summary==="string"?parsed.summary:"",
-   storyMemory:typeof parsed.storyMemory==="string"?parsed.storyMemory:"",
-   characters:Array.isArray(parsed.characters)?parsed.characters:[],
-   entities:Array.isArray(parsed.entities)?parsed.entities:[],
-   facts:Array.isArray(parsed.facts)?parsed.facts:[],
+   summary:cleanString(parsed.summary,6000),
+   storyMemory:cleanString(parsed.storyMemory,12000),
+   characters:Array.isArray(parsed.characters)?parsed.characters.filter((item:any)=>item&&typeof item==="object"):[],
+   entities:Array.isArray(parsed.entities)?parsed.entities.filter((item:any)=>item&&typeof item==="object"):[],
+   facts:Array.isArray(parsed.facts)?parsed.facts.filter((item:any)=>item&&typeof item==="object"):[],
    memoryStatus,
    memoryNeedsUpdate:memoryStatus!=="green"
   };
@@ -152,13 +174,20 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
     if(!content){
      throw Object.assign(new Error("Gemini tidak mengembalikan teks."),{code:"EMPTY_RESPONSE",status:502});
     }
+    const structured=parseStructured(request.action,content);
+    if(["memoryFoundation","storyIntelligence","qualityControl"].includes(request.action)&&structured===null){
+     throw Object.assign(new Error("Gemini mengembalikan JSON terstruktur yang tidak valid untuk aksi "+request.action+"."),{
+      code:"INVALID_STRUCTURED_OUTPUT",
+      status:502
+     });
+    }
     const usage=body?.usageMetadata;
     return {
      requestId:id,
      action:request.action,
      status:"success",
      content,
-     structured:parseStructured(request.action,content),
+     structured,
      usage:usage?{
       inputTokens:Number(usage.promptTokenCount||0)||undefined,
       outputTokens:Number(usage.candidatesTokenCount||0)||undefined,
