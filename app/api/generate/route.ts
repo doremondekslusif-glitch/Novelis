@@ -221,6 +221,7 @@ export async function POST(request:Request){
      storyMemory:typeof parsed.storyMemory==="string"?parsed.storyMemory:"",
      characters:Array.isArray(parsed.characters)?parsed.characters:[],
      entities:Array.isArray(parsed.entities)?parsed.entities:[],
+     facts:Array.isArray(parsed.facts)?parsed.facts:[],
      memoryStatus,
      memoryNeedsUpdate:memoryStatus!=="green"
     });
