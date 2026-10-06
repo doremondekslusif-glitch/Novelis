@@ -409,11 +409,12 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     if(!statement)continue;
     const requestedReplacement=Boolean(incoming?.replacesId||incoming?.replacesSubjectName||incoming?.replacesStatement);
     const replacesId=resolveReplacementFactId(incoming,factMemory);
+    const replacementUnresolved=requestedReplacement&&!replacesId;
     if(replacesId&&factMap.has(replacesId))factMap.set(replacesId,{...factMap.get(replacesId)!,status:"superseded",lastChapter:chapterNumber});
-    else if(requestedReplacement)unresolvedReplacement=true;
+    else if(replacementUnresolved)unresolvedReplacement=true;
     const existing=incoming?.id?factMap.get(String(incoming.id)):undefined;
     const id=existing?.id||String(incoming?.id||createId("fact"));
-    const status=unresolvedReplacement?"uncertain":(incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active");
+    const status=replacementUnresolved?"uncertain":(incoming.status==="superseded"||incoming.status==="uncertain"||incoming.status==="active"?incoming.status:"active");
     factMap.set(id,{...existing,...incoming,id,statement,status,firstChapter:Number(incoming.firstChapter||existing?.firstChapter||chapterNumber),lastChapter:Number(incoming.lastChapter||chapterNumber),replacesId});
    }
    const nextFacts=Array.from(factMap.values());
