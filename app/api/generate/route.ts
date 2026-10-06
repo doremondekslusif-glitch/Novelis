@@ -57,7 +57,7 @@ export async function POST(request:Request){
   // Ia tidak menyimpan memory; ia hanya menyusun ContextResult yang dibutuhkan AI.
   const currentChapterId=typeof chapter?.id==="string"?chapter.id:"";
   const chapterRecords=[
-   ...chapters.filter((item:any)=>!currentChapterId||String(item?.id||"")!==currentChapterId).map((item:any,index:number)=>({...item,number:Number(item.number||index+1)})),
+   ...chapters.map((item:any,index:number)=>({...item,number:Number(item.number||index+1)})).filter((item:any)=>!currentChapterId||String(item?.id||"")!==currentChapterId),
    {id:currentChapterId||undefined,number:Number(chapter.number||0),title:chapter.title,content:currentText,summary:chapter.summary||""}
   ];
   const contextDepth=action==="storyIntelligence"||action==="qualityControl"||action==="memory"
