@@ -32,7 +32,7 @@ function normalizeQualityReport(value:any):QualityReport|null{
  if(!Number.isFinite(checkedChapter)||checkedChapter<1)return null;
  const checkedAt=typeof value.checkedAt==="string"&&value.checkedAt.trim()?value.checkedAt:new Date().toLocaleString("id-ID");
  const checkedVersion=typeof value.checkedVersion==="string"&&value.checkedVersion.trim()?value.checkedVersion.trim():undefined;
- return {overall:value.overall==="clear"?"clear":"review",issues,checkedChapter,checkedAt,checkedVersion};
+ return {overall:value.overall==="clear"?"clear":"review",issues,checkedChapter,checkedAt,...(checkedVersion?{checkedVersion}: {})};
 }
 type MemoryStatus=EngineMemoryStatus;
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
