@@ -333,7 +333,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   const aiToken=++aiRequestSeq.current;
   const snapshot={activeId,title,text};
   const requestId=`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
-  const chapterVersion=`${activeId}:${title}:${text.length}:${text.slice(-120)}`;
+  const chapterVersion=await contentHash(activeId,title,text);
   setGenerating(true);setGenerateError("");setNotice("");
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
