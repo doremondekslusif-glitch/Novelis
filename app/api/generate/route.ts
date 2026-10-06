@@ -120,7 +120,7 @@ export async function POST(request:Request){
    prompt,
    options:{
     model:typeof body?.model==="string"&&body.model.trim()?body.model.trim():aiModel(),
-    timeoutMs:50000,
+    timeoutMs:26000,
     maxRetries:1
    }
   };
