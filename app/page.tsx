@@ -277,7 +277,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
  const persistChapter=(updatedChapters:Chapter[],nextMemory=memory,extra:Partial<Novel>={})=>{
-  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
+  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
  };
 
  const wordCount=text.trim()?text.trim().split(/\s+/).length:0;
@@ -387,7 +387,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   try{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     action:"storyIntelligence",
-    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
+    novel:{title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory:relevantFacts,relationshipsMemory:relationships,timeline,storyThreads,characterArcs},
     chapter:{title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapters:chapters.map(c=>({title:c.title,summary:c.summary}))
    })});
