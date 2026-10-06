@@ -144,7 +144,20 @@ export function mergeMemoryFoundation(input:{
 
  const nextFacts=Array.from(factMap.values());
  const aiStatus=input.memoryStatus==="red"||input.memoryStatus==="yellow"||input.memoryStatus==="green"?input.memoryStatus:"green";
- const memoryStatus:MemoryStatus=unresolvedReplacement?"red":aiStatus;
+ const hasFactChanges=input.incomingFacts.length>0;
+ const hasCharacterChanges=input.incomingCharacters.some(incoming=>{
+  const old=input.existingCharacters.find(item=>item.id===incoming.id||item.name.trim().toLowerCase()===String(incoming.name||"").trim().toLowerCase());
+  return !old || JSON.stringify({...old,lastChapter:undefined})!==JSON.stringify({...old,...incoming,lastChapter:undefined});
+ });
+ const hasEntityChanges=input.incomingEntities.some(incoming=>{
+  const old=input.existingEntities.find(item=>item.id===incoming.id||item.name.trim().toLowerCase()===String(incoming.name||"").trim().toLowerCase());
+  return !old || JSON.stringify({...old,lastChapter:undefined})!==JSON.stringify({...old,...incoming,lastChapter:undefined});
+ });
+ const hasMeaningfulChanges=hasFactChanges||hasCharacterChanges||hasEntityChanges;
+ // AI proposes the status; the memory engine is authoritative. A real memory delta
+ // cannot be reported green, while unresolved replacement is always red.
+ const validatedStatus:MemoryStatus=hasMeaningfulChanges&&aiStatus==="green"?"yellow":aiStatus;
+ const memoryStatus:MemoryStatus=unresolvedReplacement?"red":validatedStatus;
 
  return {
   storyMemory:input.storyMemory.trim(),
@@ -157,11 +170,20 @@ export function mergeMemoryFoundation(input:{
  };
 }
 
+function mergeDefined<T extends Record<string,any>>(existing:T,incoming:T){
+ const result={...existing} as T;
+ for(const [key,value] of Object.entries(incoming)){
+  if(value!==undefined) (result as any)[key]=value;
+ }
+ return result;
+}
+
 function mergeById<T extends {id?:string}>(existing:T[],incoming:T[]){
  const map=new Map(existing.map(item=>[String(item.id||JSON.stringify(item)),item]));
  for(const item of incoming){
   const key=String(item.id||JSON.stringify(item));
-  map.set(key,item);
+  const old=map.get(key);
+  map.set(key,old?mergeDefined(old,item):item);
  }
  return Array.from(map.values());
 }
@@ -170,7 +192,10 @@ function mergeArcs(existing:CharacterArc[],incoming:CharacterArc[]){
  const map=new Map(existing.map(item=>[item.character.trim().toLowerCase(),item]));
  for(const item of incoming){
   const key=String(item?.character||"").trim().toLowerCase();
-  if(key)map.set(key,item);
+  if(key){
+   const old=map.get(key);
+   map.set(key,old?mergeDefined(old,item):item);
+  }
  }
  return Array.from(map.values());
 }
