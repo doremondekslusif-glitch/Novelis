@@ -18,22 +18,7 @@ type TimelineEvent={id:string;chapter:number;title:string;description:string;cha
 type StoryThread={id:string;title:string;description:string;status:"open"|"resolved"|"uncertain";lastChapter?:number;relatedCharacters?:string[]};
 type CharacterArc={character:string;arc:string;currentState?:string;turningPoints?:string[];lastChapter?:number};
 type QualityIssue={severity:"high"|"medium"|"low";category:"continuity"|"character"|"timeline"|"world"|"plot"|"style";title:string;evidence:string;suggestion:string};
-type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string;checkedVersion?:string};
-function normalizeQualityReport(value:any):QualityReport|null{
- if(!value||typeof value!=="object")return null;
- const issues=Array.isArray(value.issues)?value.issues.map((issue:any)=>({
-  severity:issue?.severity==="high"||issue?.severity==="medium"||issue?.severity==="low"?issue.severity:"low",
-  category:issue?.category==="continuity"||issue?.category==="character"||issue?.category==="timeline"||issue?.category==="world"||issue?.category==="plot"||issue?.category==="style"?issue.category:"plot",
-  title:String(issue?.title||"Temuan Quality Control").trim().slice(0,200),
-  evidence:String(issue?.evidence||"").trim().slice(0,2000),
-  suggestion:String(issue?.suggestion||"").trim().slice(0,2000)
- })).filter((issue:any)=>issue.title&&issue.evidence).slice(0,8):[];
- const checkedChapter=Number(value.checkedChapter);
- if(!Number.isFinite(checkedChapter)||checkedChapter<1)return null;
- const checkedAt=typeof value.checkedAt==="string"&&value.checkedAt.trim()?value.checkedAt:new Date().toLocaleString("id-ID");
- const checkedVersion=typeof value.checkedVersion==="string"&&value.checkedVersion.trim()?value.checkedVersion.trim():undefined;
- return {overall:value.overall==="clear"?"clear":"review",issues,checkedChapter,checkedAt,...(checkedVersion?{checkedVersion}: {})};
-}
+type QualityReport={overall:"clear"|"review";issues:QualityIssue[];checkedChapter:number;checkedAt:string;checkedVersion:string};
 type MemoryStatus=EngineMemoryStatus;
 type BuilderData={premise:string;theme:string;tone:string;style:string;pointOfView:string;audience:string;length:string;chapterTarget:string;ending:string;aiFreedom:string;locked:string[];characters:string;world:string;outline:string};
 type Novel={id:string;title:string;genre:string;chapters:number;progress:number;updated:string;createdAt:string;updatedAt:string;cloudVersion?:number;deletedAt?:string;idea?:string;builder?:BuilderData;memory?:string;charactersMemory?:CharacterMemory[];entitiesMemory?:EntityMemory[];relationshipsMemory?:RelationshipMemory[];timeline?:TimelineEvent[];storyThreads?:StoryThread[];characterArcs?:CharacterArc[];factMemory?:FactMemory[];memoryNeedsUpdate?:boolean;memoryLastAnalyzedChapter?:number;storyIntelligenceLastAnalyzedChapter?:number;memoryStatus?:MemoryStatus;memoryStatusChapter?:number;qualityReport?:QualityReport;chapterList?:Chapter[]};
@@ -271,7 +256,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [summaryBusy,setSummaryBusy]=useState(false);
  const [intelligenceBusy,setIntelligenceBusy]=useState(false);
  const [qualityBusy,setQualityBusy]=useState(false);
- const [qualityReport,setQualityReport]=useState<QualityReport|null>(()=>normalizeQualityReport(novel.qualityReport));
+ const [qualityReport,setQualityReport]=useState<QualityReport|null>(()=>novel.qualityReport||null);
  const [focusMode,setFocusMode]=useState(false);
  const [wordGoal,setWordGoal]=useState(1000);
  const aiRequestSeq=useRef(0);
@@ -289,12 +274,12 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const relevantFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,30);
  const qualityFacts=getRelevantFacts(factMemory,text,characterMemories,entityMemories,60);
  const qualityVersion=`${activeId}:${title}:${text.length}:${text.slice(-120)}`;
- const displayQualityReport=qualityReport&&qualityReport.checkedChapter===chapterNumber&&(!qualityReport.checkedVersion||qualityReport.checkedVersion===qualityVersion)?qualityReport:null;
+ const displayQualityReport=qualityReport&&qualityReport.checkedChapter===chapterNumber&&qualityReport.checkedVersion===qualityVersion?qualityReport:null;
 
  useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
 
  const persistChapter=(updatedChapters:Chapter[],nextMemory=memory,extra:Partial<Novel>={})=>{
-  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,qualityReport:normalizeQualityReport(qualityReport),chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
+  onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,qualityReport:qualityReport||undefined,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
  };
 
  const wordCount=text.trim()?text.trim().split(/\s+/).length:0;
@@ -382,7 +367,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     novel:{id:novel.id,title:novel.title,genre:novel.genre,builder:novel.builder,memory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory},
     chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
     chapterId:activeId,
-    chapterVersion:`${activeId}:${title}:${text.length}:${text.slice(-120)}`,
+    chapterVersion:qualityVersion,
     chapters:chapters.map((c,i)=>({id:c.id,number:i+1,title:c.title,summary:c.summary}))
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menganalisis memori cerita.");
@@ -471,7 +456,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    })});
    const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal menjalankan Quality Control.");
    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil Quality Control dibatalkan karena naskah sudah berubah. Silakan jalankan pemeriksaan kembali.");
-   const issues=Array.isArray(data.issues)?data.issues.map((issue:any)=>({severity:issue?.severity==="high"||issue?.severity==="medium"||issue?.severity==="low"?issue.severity:"low",category:issue?.category==="continuity"||issue?.category==="character"||issue?.category==="timeline"||issue?.category==="world"||issue?.category==="plot"||issue?.category==="style"?issue.category:"plot",title:String(issue?.title||"Temuan Quality Control").trim().slice(0,200),evidence:String(issue?.evidence||"").trim().slice(0,2000),suggestion:String(issue?.suggestion||"").trim().slice(0,2000)})).filter((issue:any)=>issue.title&&issue.evidence).slice(0,8) as QualityIssue[]:[];
+   const issues=Array.isArray(data.issues)?data.issues as QualityIssue[]:[];
    const report:QualityReport={overall:data.overall==="clear"?"clear":"review",issues,checkedChapter:chapterNumber,checkedAt:new Date().toLocaleString("id-ID"),checkedVersion:qualityVersion};
    setQualityReport(report);
    onUpdate({...novel,qualityReport:report,chapterList:chapters,chapters:chapters.length,updatedAt:nowIso(),updated:"Baru saja"});
