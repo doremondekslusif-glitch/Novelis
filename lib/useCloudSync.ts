@@ -174,6 +174,12 @@ export function useCloudSync<T extends CloudNovel>(
           });
           if(error)throw error;
           const result=Array.isArray(saveData)?saveData[0]:saveData;
+          if(result?.status==="conflict"&&!result?.data){
+            setNovels(current=>current.filter(item=>item.id!==novel.id));
+            novelsRef.current=novelsRef.current.filter(item=>item.id!==novel.id);
+            lastUploadRef.current.delete(novel.id);
+            continue;
+          }
           if(result?.status==="conflict"&&result?.data){
             const remoteNovel={...((result.data||{}) as T),id:novel.id,updatedAt:result.updated_at||((result.data as T)?.updatedAt),cloudVersion:Number(result.version||0)};
             const currentLocal=novelsRef.current.find(item=>item.id===novel.id);
