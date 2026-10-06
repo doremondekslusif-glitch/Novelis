@@ -56,7 +56,7 @@ const LIMITS:Record<ContextDepth,Record<string,number>> = {
 function text(value:any){return String(value ?? "").trim();}
 function lower(value:any){return text(value).toLowerCase();}
 function words(value:string){
-  return lower(value).split(/[^a-z0-9\\u00C0-\\u024F]+/gi).filter(v=>v.length>=3);
+  return lower(value).split(/[^a-z0-9\u00C0-\u024F]+/gi).filter(v=>v.length>=3);
 }
 function unique(values:string[]){
   return Array.from(new Set(values.filter(Boolean)));
@@ -108,7 +108,7 @@ function scoreItem(item:AnyRecord, queryTerms:string[], currentChapter:number){
 function rank(items:AnyRecord[], query:string, currentChapter:number, limit:number){
   const queryTerms = unique([
     ...words(query),
-    ...query.split(/[,.;:!?\\n]+/).map(v=>lower(v)).filter(v=>v.length>=2)
+    ...query.split(/[,.;:!?\n]+/).map(v=>lower(v)).filter(v=>v.length>=2)
   ]);
   return items
     .map(item=>scoreItem(item,queryTerms,currentChapter))
