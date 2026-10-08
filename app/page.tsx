@@ -5,7 +5,7 @@ import AuthPanel from "@/components/AuthPanel";
 import {useCloudSync} from "@/lib/useCloudSync";
 import {mergeMemoryFoundation,mergeStoryIntelligence,type MemoryStatus as EngineMemoryStatus} from "@/lib/memoryEngine";
 import {getChapterWordTarget,formatChapterTarget} from "@/lib/genreProfile";
-import {clearGenerationJob,createGenerationJob,loadGenerationJob,saveGenerationJob,sceneCountForChapter} from "@/lib/generationJob";
+import {clearGenerationJob,createGenerationJob,loadGenerationJob,saveGenerationJob,sceneCountForChapter,type GenerationJob} from "@/lib/generationJob";
 import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2,Maximize2,Minimize2,Download,FileArchive,FileJson,FileType} from "lucide-react";
 import JSZip from "jszip";
 import {jsPDF} from "jspdf";
@@ -396,7 +396,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    if(action==="generate"||action==="continue"){
     const target=getChapterWordTarget(String(novel.genre||""),String(novel.builder?.length||"sedang"));
     const totalScenes=sceneCountForChapter(target.min,target.max);
-    let job=loadGenerationJob(novel.id,activeId);
+    let job:GenerationJob|null=loadGenerationJob(novel.id,activeId);
 
     if(job&&(
       job.action!==action ||
