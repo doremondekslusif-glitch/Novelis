@@ -56,6 +56,11 @@ export async function POST(request:Request){
   };
 
   const currentText=clip(chapter.content,12000);
+  const sceneCurrentText=isSceneGeneration&&sceneIndex>0
+   ? (currentText.length>6000
+      ? currentText.slice(0,1000)+"\n...[bagian tengah dipadatkan untuk menjaga latensi]...\n"+currentText.slice(-5000)
+      : currentText)
+   : currentText;
   const previousFullText=String(previousChapter?.content||"").trim();
   // Untuk kontinuitas, bagian akhir bab tetap diprioritaskan.
   const previousEnding=previousFullText.length>8000?previousFullText.slice(-8000):previousFullText;
@@ -76,7 +81,7 @@ export async function POST(request:Request){
   const context=buildContext(novel,chapterRecords,{
    action,
    depth:contextDepth,
-   query:[chapter.title,currentText,previousSummary,previousEnding].filter(Boolean).join("\n"),
+   query:[chapter.title,isSceneGeneration?sceneCurrentText:currentText,previousSummary,previousEnding].filter(Boolean).join("\n"),
    currentChapter:Number(chapter.number||0),
    budget:action==="qualityControl"||action==="storyIntelligence"?30000:undefined
   });
@@ -122,7 +127,7 @@ export async function POST(request:Request){
    action==="continue" && previousEnding ? "KONTEKS AKHIR BAB SEBELUMNYA — TITIK MULAI WAJIB:\n"+previousEnding : "",
    action==="continue" && previousFullText ? "ATURAN KONTINUITAS: Bab baru WAJIB bergerak maju dari kalimat/kejadian terakhir di konteks di atas. Jangan menulis ulang bagian awal bab sebelumnya, jangan mengulang adegan yang sama dengan kata-kata berbeda, dan jangan memulai kembali dari titik waktu yang lebih awal. Ringkasan bab terdahulu adalah konteks historis, sedangkan bagian akhir bab sebelumnya adalah titik mulai aktual." : "",
    action==="qualityControl" && previousEnding ? "KONTEKS AKHIR BAB SEBELUMNYA:\n"+previousEnding : "",
-   currentText ? "TEKS BAB SEKARANG / HASIL SCENE SEBELUMNYA:\n"+currentText : ""
+   (isSceneGeneration?sceneCurrentText:currentText) ? "TEKS BAB SEKARANG / HASIL SCENE SEBELUMNYA:\n"+(isSceneGeneration?sceneCurrentText:currentText) : ""
   ].filter(Boolean).join("\n\n");
 
   const requestId=typeof body?.requestId==="string"&&body.requestId.trim()?body.requestId.trim():undefined;
@@ -136,7 +141,8 @@ export async function POST(request:Request){
    options:{
     model:typeof body?.model==="string"&&body.model.trim()?body.model.trim():aiModel(),
     timeoutMs:isSceneGeneration?45000:50000,
-    maxRetries:isSceneGeneration?0:1
+    maxRetries:isSceneGeneration?0:1,
+    maxOutputTokens:isSceneGeneration?Math.max(700,Math.ceil(sceneMax*2.2)):undefined
    }
   };
 
