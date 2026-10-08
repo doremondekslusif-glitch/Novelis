@@ -5,6 +5,7 @@ import AuthPanel from "@/components/AuthPanel";
 import {useCloudSync} from "@/lib/useCloudSync";
 import {mergeMemoryFoundation,mergeStoryIntelligence,type MemoryStatus as EngineMemoryStatus} from "@/lib/memoryEngine";
 import {getChapterWordTarget,formatChapterTarget} from "@/lib/genreProfile";
+import {clearGenerationJob,createGenerationJob,loadGenerationJob,saveGenerationJob,sceneCountForChapter,type GenerationJob} from "@/lib/generationJob";
 import {BookOpen,BookMarked,Plus,Sparkles,Users,Globe2,FileText,ChevronRight,Search,MoreHorizontal,ArrowLeft,WandSparkles,Save,Play,X,Trash2,Check,MessageCircle,Loader2,Maximize2,Minimize2,Download,FileArchive,FileJson,FileType} from "lucide-react";
 import JSZip from "jszip";
 import {jsPDF} from "jspdf";
@@ -338,13 +339,17 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   const requestId=`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
   const chapterVersion=await contentHash(activeId,title,text);
   setGenerating(true);setGenerateError("");setNotice("");
-  try{
+
+  const runSingleAI=async(singleAction:string,currentText:string,sceneIndex?:number,sceneCount?:number)=>{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    action,
-    requestId,
+    action:singleAction,
+    requestId:requestId+"_"+String(sceneIndex??0),
     chapterId:activeId,
     chapterVersion,
+    sceneIndex,
+    sceneCount,
     novel:{
+     id:novel.id,
      title:novel.title,
      genre:novel.genre,
      builder:novel.builder,
@@ -357,17 +362,94 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
      storyThreads,
      characterArcs
     },
-    chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:text,number:chapterNumber},
+    chapter:{id:activeId,title:title.trim()||`Bab ${chapterNumber}`,content:currentText,number:chapterNumber},
     chapters:chapters.map((c,i)=>({number:i+1,title:c.title,summary:c.summary||""})),
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
-   const data=await res.json();if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
-   if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil AI dibatalkan karena naskah sudah berubah. Silakan jalankan AI kembali.");
-   const generated=(data.text||"").trim();if(!generated)throw new Error("AI tidak menghasilkan teks.");
-   if(action==="generate"||action==="continue")setText(text.trim()?text.trim()+"\n\n"+generated:generated);
-   else setText(generated);
-   setDirty(true);setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":action==="description"?"Deskripsi diperkaya":"Cerita berhasil dibuat");
-  }catch(error){setGenerateError(error instanceof Error?error.message:"Gagal memproses tulisan.")}finally{setGenerating(false)}
+   const data=await res.json();
+   if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
+   const generated=(data.text||"").trim();
+   if(!generated)throw new Error("AI tidak menghasilkan teks.");
+   return generated;
+  };
+
+  try{
+   if(action==="generate"||action==="continue"){
+    const target=getChapterWordTarget(String(novel.genre||""),String(novel.builder?.length||"sedang"));
+    const totalScenes=sceneCountForChapter(target.min,target.max);
+    let job=loadGenerationJob(novel.id,activeId);
+
+    if(job&&(
+      job.action!==action ||
+      job.title!==snapshot.title ||
+      job.baseText!==snapshot.text ||
+      job.status==="completed"
+    )){
+      job=null;
+    }
+
+    if(!job){
+      job=createGenerationJob({
+       novelId:novel.id,
+       chapterId:activeId,
+       action,
+       title:snapshot.title,
+       baseText:snapshot.text,
+       sceneCount:totalScenes
+      });
+    }else if(job.sceneCount!==totalScenes){
+      job={...job,sceneCount:totalScenes};
+    }
+
+    job={...job,status:"running",error:undefined,updatedAt:new Date().toISOString()};
+    saveGenerationJob(job);
+    setText(job.accumulatedText);
+    setNotice(`Generation Job dimulai • Scene ${Math.min(job.nextScene+1,job.sceneCount)}/${job.sceneCount}`);
+
+    while(job.nextScene<job.sceneCount){
+      if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title){
+       throw new Error("Generation dihentikan karena bab atau judul berubah. Checkpoint scene yang sudah selesai tetap tersimpan.");
+      }
+
+      const sceneText=await runSingleAI(action,job.accumulatedText,job.nextScene,job.sceneCount);
+      const separator=job.accumulatedText.trim()?"\n\n":"";
+      job={
+       ...job,
+       accumulatedText:job.accumulatedText.trim()+separator+sceneText,
+       nextScene:job.nextScene+1,
+       updatedAt:new Date().toISOString(),
+       status:"running",
+       error:undefined
+      };
+      saveGenerationJob(job);
+      setText(job.accumulatedText);
+      setDirty(true);
+      setNotice(`Scene ${job.nextScene}/${job.sceneCount} selesai • checkpoint tersimpan`);
+    }
+
+    job={...job,status:"completed",updatedAt:new Date().toISOString()};
+    saveGenerationJob(job);
+    clearGenerationJob(novel.id,activeId);
+    setText(job.accumulatedText);
+    setDirty(true);
+    setNotice(`Chapter berhasil dibuat • ${job.sceneCount} scene selesai`);
+   }else{
+    const generated=await runSingleAI(action,text);
+    if(aiToken!==aiRequestSeq.current||latestEditorRef.current.activeId!==snapshot.activeId||latestEditorRef.current.title!==snapshot.title||latestEditorRef.current.text!==snapshot.text)throw new Error("Hasil AI dibatalkan karena naskah sudah berubah. Silakan jalankan AI kembali.");
+    setText(generated);
+    setDirty(true);
+    setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":"Deskripsi diperkaya");
+   }
+  }catch(error){
+   if(action==="generate"||action==="continue"){
+    const checkpoint=loadGenerationJob(novel.id,activeId);
+    if(checkpoint){
+     saveGenerationJob({...checkpoint,status:"paused",error:error instanceof Error?error.message:"Generation gagal",updatedAt:new Date().toISOString()});
+     setText(checkpoint.accumulatedText);
+    }
+   }
+   setGenerateError(error instanceof Error?error.message:"Gagal memproses tulisan.");
+  }finally{setGenerating(false)}
  };
 
  const runFullAnalysis=async()=>{
