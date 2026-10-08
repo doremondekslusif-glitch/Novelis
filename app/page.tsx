@@ -382,7 +382,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     if(job&&(
       job.action!==action ||
       job.title!==snapshot.title ||
-      job.baseText!==snapshot.text ||
+      job.accumulatedText!==snapshot.text ||
       job.status==="completed"
     )){
       job=null;
