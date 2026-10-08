@@ -292,7 +292,26 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  },[activeId,title,text]);
  const displayQualityReport=qualityReport&&qualityReport.checkedChapter===chapterNumber&&qualityReport.checkedVersion===qualityVersion?qualityReport:null;
 
- useEffect(()=>{if(active){setTitle(active.title);setText(active.content);setDirty(false);setGenerateError("");setNotice("")}},[activeId]);
+ useEffect(()=>{
+  if(!active)return;
+  setTitle(active.title);
+  setText(active.content);
+  setDirty(false);
+  setGenerateError("");
+  setNotice("");
+  const checkpoint=loadGenerationJob(novel.id,activeId);
+  if(
+   checkpoint &&
+   checkpoint.status!=="completed" &&
+   checkpoint.title===active.title &&
+   checkpoint.accumulatedText.length>active.content.length &&
+   checkpoint.accumulatedText.startsWith(active.content)
+  ){
+   setText(checkpoint.accumulatedText);
+   setDirty(true);
+   setNotice(`Checkpoint Generation tersedia • Scene ${checkpoint.nextScene}/${checkpoint.sceneCount} selesai • klik ${checkpoint.action==="continue"?"Lanjutkan":"Generate"} untuk meneruskan`);
+  }
+ },[activeId]);
 
  const persistChapter=(updatedChapters:Chapter[],nextMemory=memory,extra:Partial<Novel>={})=>{
   onUpdate({...novel,memory:nextMemory,charactersMemory:characterMemories,entitiesMemory:entityMemories,factMemory,memoryNeedsUpdate,memoryStatus,memoryStatusChapter,memoryLastAnalyzedChapter:novel.memoryLastAnalyzedChapter,qualityReport:qualityReport||undefined,chapterList:updatedChapters,chapters:updatedChapters.length,progress:Math.min(100,Math.round(updatedChapters.filter(c=>c.status==="Selesai").length/Math.max(1,updatedChapters.length)*100)),updatedAt:nowIso(),updated:"Baru saja",...extra});
@@ -424,6 +443,11 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
       saveGenerationJob(job);
       setText(job.accumulatedText);
       setDirty(true);
+      const checkpointChapters:Chapter[]=chapters.map(ch=>ch.id===activeId
+       ?{...ch,title:snapshot.title.trim()||`Bab ${chapterNumber}`,content:job.accumulatedText,status:"Draft"}
+       :ch
+      );
+      persistChapter(checkpointChapters);
       setNotice(`Scene ${job.nextScene}/${job.sceneCount} selesai • checkpoint tersimpan`);
     }
 
