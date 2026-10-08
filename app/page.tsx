@@ -397,15 +397,15 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     const target=getChapterWordTarget(String(novel.genre||""),String(novel.builder?.length||"sedang"));
     const totalScenes=sceneCountForChapter(target.min,target.max);
     const loadedJob=loadGenerationJob(novel.id,activeId);
-    const reusableJob=loadedJob&&
+    const reusableJob:GenerationJob|null=loadedJob&&
       loadedJob.action===action&&
       loadedJob.title===snapshot.title&&
       loadedJob.accumulatedText===snapshot.text&&
-      loadedJob.status!=="completed";
-
-    let job:GenerationJob=reusableJob
+      loadedJob.status!=="completed"
       ? loadedJob
-      : createGenerationJob({
+      : null;
+
+    let job:GenerationJob=reusableJob??createGenerationJob({
          novelId:novel.id,
          chapterId:activeId,
          action,
