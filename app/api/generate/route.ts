@@ -36,6 +36,11 @@ export async function POST(request:Request){
   const factMemory=Array.isArray(novel.factMemory)?novel.factMemory:[];
   const chapterWordTarget=getChapterWordTarget(String(novel.genre||""),String(builder.length||"sedang"));
   const chapterTargetText=`${chapterWordTarget.min}–${chapterWordTarget.max} kata`;
+  const sceneIndex=Math.max(0,Number(body?.sceneIndex||0));
+  const sceneCount=Math.max(1,Number(body?.sceneCount||1));
+  const sceneMin=Math.max(200,Math.floor(chapterWordTarget.min/sceneCount));
+  const sceneMax=Math.max(sceneMin,Math.ceil(chapterWordTarget.max/sceneCount));
+  const isSceneGeneration=(action==="generate"||action==="continue")&&sceneCount>1;
   const clip=(value:unknown,max:number)=>String(value??"").trim().slice(0,max);
 
   const instructions:Record<Action,string>={
@@ -77,12 +82,18 @@ export async function POST(request:Request){
   });
   const retrievedContext=contextForPrompt(context);
 
+  const sceneInstruction=isSceneGeneration
+   ? (sceneIndex===0
+      ? "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Ini adalah bagian pertama. Mulai dari titik awal bab yang benar. Target scene: "+sceneMin+"–"+sceneMax+" kata. Jangan mencoba menyelesaikan seluruh bab dalam scene ini. Bangun adegan yang natural dan akhiri pada titik yang memungkinkan scene berikutnya melanjutkan cerita."
+      : "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Lanjutkan TEPAT dari akhir teks yang sudah ada. Jangan mengulang isi sebelumnya. Target scene: "+sceneMin+"–"+sceneMax+" kata. Majukan kejadian secara natural dan jangan mencoba mengulang atau merangkum scene sebelumnya.")
+   : "";
+
   const prompt=[
    "Kamu adalah AI penulis novel untuk aplikasi Novelis.",
    "Gunakan bahasa Indonesia yang natural, imersif, matang, dan enak dibaca.",
    "Jangan memberi catatan, penjelasan, judul tambahan, atau markdown kecuali diminta secara khusus oleh instruksi.",
    "Pertahankan kesinambungan karakter, dunia, konflik, hubungan tokoh, waktu, sebab-akibat, dan outline.",
-   instructions[action]||instructions.generate,
+   isSceneGeneration ? sceneInstruction : (instructions[action]||instructions.generate),
    "",
    "FONDASI CERITA",
    "Judul novel: "+(novel.title||"Tanpa judul"),
@@ -111,7 +122,7 @@ export async function POST(request:Request){
    action==="continue" && previousEnding ? "KONTEKS AKHIR BAB SEBELUMNYA — TITIK MULAI WAJIB:\n"+previousEnding : "",
    action==="continue" && previousFullText ? "ATURAN KONTINUITAS: Bab baru WAJIB bergerak maju dari kalimat/kejadian terakhir di konteks di atas. Jangan menulis ulang bagian awal bab sebelumnya, jangan mengulang adegan yang sama dengan kata-kata berbeda, dan jangan memulai kembali dari titik waktu yang lebih awal. Ringkasan bab terdahulu adalah konteks historis, sedangkan bagian akhir bab sebelumnya adalah titik mulai aktual." : "",
    action==="qualityControl" && previousEnding ? "KONTEKS AKHIR BAB SEBELUMNYA:\n"+previousEnding : "",
-   currentText ? "TEKS BAB SEKARANG:\n"+currentText : ""
+   currentText ? "TEKS BAB SEKARANG / HASIL SCENE SEBELUMNYA:\n"+currentText : ""
   ].filter(Boolean).join("\n\n");
 
   const requestId=typeof body?.requestId==="string"&&body.requestId.trim()?body.requestId.trim():undefined;
@@ -124,8 +135,8 @@ export async function POST(request:Request){
    prompt,
    options:{
     model:typeof body?.model==="string"&&body.model.trim()?body.model.trim():aiModel(),
-    timeoutMs:50000,
-    maxRetries:1
+    timeoutMs:isSceneGeneration?45000:50000,
+    maxRetries:isSceneGeneration?0:1
    }
   };
 
