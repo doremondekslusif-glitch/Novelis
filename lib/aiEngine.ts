@@ -21,6 +21,7 @@ export interface AIRequest {
     model?: string;
     timeoutMs?: number;
     maxRetries?: number;
+    maxOutputTokens?: number;
   };
 }
 
@@ -159,7 +160,8 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
      contents:[{role:"user",parts:[{text:request.prompt}]}],
      generationConfig:{
       thinkingConfig:{thinkingLevel:"low"},
-      responseMimeType:["memoryFoundation","storyIntelligence","qualityControl"].includes(request.action)?"application/json":"text/plain"
+      responseMimeType:["memoryFoundation","storyIntelligence","qualityControl"].includes(request.action)?"application/json":"text/plain",
+      ...(request.options?.maxOutputTokens?{maxOutputTokens:Math.max(256,Math.floor(request.options.maxOutputTokens))}:{})
      }
     }),
     signal:controller.signal
