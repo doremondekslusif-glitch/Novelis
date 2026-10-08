@@ -396,27 +396,25 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    if(action==="generate"||action==="continue"){
     const target=getChapterWordTarget(String(novel.genre||""),String(novel.builder?.length||"sedang"));
     const totalScenes=sceneCountForChapter(target.min,target.max);
-    let job:GenerationJob|null=loadGenerationJob(novel.id,activeId);
+    const loadedJob=loadGenerationJob(novel.id,activeId);
+    const reusableJob=loadedJob&&
+      loadedJob.action===action&&
+      loadedJob.title===snapshot.title&&
+      loadedJob.accumulatedText===snapshot.text&&
+      loadedJob.status!=="completed";
 
-    if(job&&(
-      job.action!==action ||
-      job.title!==snapshot.title ||
-      job.accumulatedText!==snapshot.text ||
-      job.status==="completed"
-    )){
-      job=null;
-    }
+    let job:GenerationJob=reusableJob
+      ? loadedJob
+      : createGenerationJob({
+         novelId:novel.id,
+         chapterId:activeId,
+         action,
+         title:snapshot.title,
+         baseText:snapshot.text,
+         sceneCount:totalScenes
+        });
 
-    if(!job){
-      job=createGenerationJob({
-       novelId:novel.id,
-       chapterId:activeId,
-       action,
-       title:snapshot.title,
-       baseText:snapshot.text,
-       sceneCount:totalScenes
-      });
-    }else if(job.sceneCount!==totalScenes){
+    if(job.sceneCount!==totalScenes){
       job={...job,sceneCount:totalScenes};
     }
 
@@ -431,10 +429,13 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
       }
 
       const sceneText=await runSingleAI(action,job.accumulatedText,job.nextScene,job.sceneCount);
-      const separator=job.accumulatedText.trim()?"\n\n":"";
+      const previousSceneText=job.accumulatedText.trim();
+      const nextAccumulatedText=previousSceneText
+       ? previousSceneText+"\n\n"+sceneText
+       : sceneText;
       job={
        ...job,
-       accumulatedText:job.accumulatedText.trim()+separator+sceneText,
+       accumulatedText:nextAccumulatedText,
        nextScene:job.nextScene+1,
        updatedAt:new Date().toISOString(),
        status:"running",
