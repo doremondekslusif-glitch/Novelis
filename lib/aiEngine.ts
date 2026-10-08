@@ -166,7 +166,11 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
     }),
     signal:controller.signal
    });
-   const body=await response.json();
+   const rawBody=await response.text();
+   let body:any=null;
+   try{body=rawBody?JSON.parse(rawBody):null}catch{
+    body={error:{message:rawBody.slice(0,1000)}};
+   }
    if(response.ok){
     const content=body?.candidates?.[0]?.content?.parts
      ?.filter((part:{text?:string})=>typeof part.text==="string")
