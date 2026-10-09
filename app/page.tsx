@@ -271,6 +271,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const chapterWordTarget=getChapterWordTarget(novel.genre,novel.builder?.length||"sedang");
  const [wordGoal,setWordGoal]=useState(()=>Math.round((chapterWordTarget.min+chapterWordTarget.max)/2));
  const aiRequestSeq=useRef(0);
+ const generationLockRef=useRef(false);
  const latestEditorRef=useRef({activeId,title,text});
  latestEditorRef.current={activeId,title,text};
  const [exportOpen,setExportOpen]=useState(false);
@@ -352,12 +353,25 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const removeChapter=()=>{if(chapters.length===1)return;const next=chapters.filter(c=>c.id!==activeId);setChapters(next);setActiveId(next[0].id);persistChapter(next);setDirty(false);setNotice("Bab dihapus dan perubahan tersimpan")};
 
  const runAI=async(action:"generate"|"continue"|"improve"|"dialog"|"description")=>{
-  if(generating)return;
+  if(generating||generationLockRef.current)return;
+  const cooldownKey=`novelis:generate-cooldown:${novel.id}:${activeId}`;
+  if(action==="generate"||action==="continue"){
+   try{
+    const until=Number(localStorage.getItem(cooldownKey)||0);
+    if(until>Date.now()){
+     setGenerateError(`Gemini baru saja mengembalikan error 503. Untuk mencegah request berulang, tunggu ${Math.ceil((until-Date.now())/1000)} detik sebelum mencoba lagi.`);
+     return;
+    }
+    if(until)localStorage.removeItem(cooldownKey);
+   }catch{}
+  }
+  generationLockRef.current=true;
+  setGenerating(true);setGenerateError("");setNotice("");
   const aiToken=++aiRequestSeq.current;
   const snapshot={activeId,title,text};
   const requestId=`req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
-  const chapterVersion=await contentHash(activeId,title,text);
-  setGenerating(true);setGenerateError("");setNotice("");
+  let chapterVersion:string;
+  try{chapterVersion=await contentHash(activeId,title,text)}catch(error){generationLockRef.current=false;setGenerating(false);setGenerateError(error instanceof Error?error.message:"Gagal menyiapkan permintaan.");return;}
 
   const runSingleAI=async(singleAction:string,currentText:string,sceneIndex?:number,sceneCount?:number)=>{
    const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
@@ -386,7 +400,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     previousChapter:previousChapter?{title:previousChapter.title,content:previousChapter.content,summary:previousChapter.summary||""}:null
    })});
    const data=await res.json();
-   if(!res.ok)throw new Error(data.error||"Gagal memproses tulisan.");
+   if(!res.ok){
+    const failure=Object.assign(new Error(data.error||"Gagal memproses tulisan."),{status:res.status,code:data.code});
+    throw failure;
+   }
    const generated=(data.text||"").trim();
    if(!generated)throw new Error("AI tidak menghasilkan teks.");
    return generated;
@@ -466,6 +483,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":"Deskripsi diperkaya");
    }
   }catch(error){
+   if((action==="generate"||action==="continue")&&Number((error as any)?.status)===503){
+    try{localStorage.setItem(cooldownKey,String(Date.now()+60000))}catch{}
+   }
    if(action==="generate"||action==="continue"){
     const checkpoint=loadGenerationJob(novel.id,activeId);
     if(checkpoint){
@@ -474,7 +494,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     }
    }
    setGenerateError(error instanceof Error?error.message:"Gagal memproses tulisan.");
-  }finally{setGenerating(false)}
+  }finally{generationLockRef.current=false;setGenerating(false)}
  };
 
  const runFullAnalysis=async()=>{
