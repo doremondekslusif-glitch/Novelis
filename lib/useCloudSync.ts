@@ -90,6 +90,15 @@ export function useCloudSync<T extends CloudNovel>(
         }
 
         if(!active)return;
+        // Treat cloud rows that were already merged as synced. Without this,
+        // lastUploadRef stays empty and the upload effect re-reads every
+        // existing novel from Supabase immediately after initial hydration.
+        const pendingUploadIds=new Set(upload.map(item=>item.item.id));
+        for(const item of merged){
+          if(!pendingUploadIds.has(item.id)){
+            lastUploadRef.current.set(item.id,syncToken(item));
+          }
+        }
         setNovels(merged);
         setCloudReady(true);
 
