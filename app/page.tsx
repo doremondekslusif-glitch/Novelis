@@ -450,15 +450,25 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
        throw new Error("Generation dihentikan karena bab atau judul berubah. Checkpoint scene yang sudah selesai tetap tersimpan.");
       }
 
-      const sceneText=await runSingleAI(action,job.accumulatedText,job.nextScene,job.sceneCount);
+      const rawSceneText=await runSingleAI(action,job.accumulatedText,job.nextScene,job.sceneCount);
+      const completeMarker=/\\[\\[CHAPTER_COMPLETE\\]\\]/i.test(rawSceneText);
+      const continueMarker=/\\[\\[CHAPTER_CONTINUE\\]\\]/i.test(rawSceneText);
+      const sceneText=rawSceneText.replace(/\\s*\\[\\[(?:CHAPTER_COMPLETE|CHAPTER_CONTINUE)\\]\\]\\s*/gi,"").trim();
+      if(!sceneText)throw new Error("AI tidak menghasilkan isi scene yang dapat disimpan.");
       const previousSceneText=job.accumulatedText.trim();
       const nextAccumulatedText=previousSceneText
        ? previousSceneText+"\n\n"+sceneText
        : sceneText;
+      const nextScene=job.nextScene+1;
+      const updatedWordCount=nextAccumulatedText.trim().split(/\\s+/).length;
+      const reachedTarget=updatedWordCount>=Math.floor(job.targetWords||targetWords);
+      const shouldFinish=completeMarker||(reachedTarget&&!continueMarker);
+      const nextSceneCount=shouldFinish?nextScene:Math.min(8,Math.max(job.sceneCount,nextScene+1));
       job={
        ...job,
        accumulatedText:nextAccumulatedText,
-       nextScene:job.nextScene+1,
+       nextScene,
+       sceneCount:nextSceneCount,
        updatedAt:new Date().toISOString(),
        status:"running",
        error:undefined
