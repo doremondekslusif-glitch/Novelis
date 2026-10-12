@@ -381,6 +381,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     chapterVersion,
     sceneIndex,
     sceneCount,
+    targetWords:wordGoal>0?wordGoal:Math.round((chapterWordTarget.min+chapterWordTarget.max)/2),
     novel:{
      id:novel.id,
      title:novel.title,
@@ -412,11 +413,14 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
   try{
    if(action==="generate"||action==="continue"){
     const target=getChapterWordTarget(String(novel.genre||""),String(novel.builder?.length||"sedang"));
-    const totalScenes=sceneCountForChapter(target.min,target.max);
+    const targetWords=wordGoal>0?wordGoal:Math.round((target.min+target.max)/2);
+    const existingWords=snapshot.text.trim()?snapshot.text.trim().split(/\\s+/).length:0;
+    const totalScenes=sceneCountForChapter(target.min,target.max,existingWords,targetWords);
     const loadedJob=loadGenerationJob(novel.id,activeId);
     const reusableJob:GenerationJob|null=loadedJob&&
       loadedJob.action===action&&
       loadedJob.title===snapshot.title&&
+      loadedJob.targetWords===targetWords&&
       loadedJob.accumulatedText===snapshot.text&&
       loadedJob.status!=="completed"
       ? loadedJob
@@ -428,11 +432,12 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
          action,
          title:snapshot.title,
          baseText:snapshot.text,
-         sceneCount:totalScenes
+         sceneCount:totalScenes,
+         targetWords
         });
 
-    if(job.sceneCount!==totalScenes){
-      job={...job,sceneCount:totalScenes};
+    if(job.sceneCount!==totalScenes||job.targetWords!==targetWords){
+      job={...job,sceneCount:totalScenes,targetWords};
     }
 
     job={...job,status:"running",error:undefined,updatedAt:new Date().toISOString()};
