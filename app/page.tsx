@@ -436,9 +436,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
          targetWords
         });
 
-    if(job.sceneCount!==totalScenes||job.targetWords!==targetWords){
-      job={...job,sceneCount:totalScenes,targetWords};
-    }
+    // Job yang dilanjutkan mempertahankan rencana scene dan checkpoint yang sudah berjalan.
 
     job={...job,status:"running",error:undefined,updatedAt:new Date().toISOString()};
     saveGenerationJob(job);
