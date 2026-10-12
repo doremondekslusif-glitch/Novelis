@@ -39,7 +39,7 @@ export async function POST(request:Request){
   const sceneIndex=Math.max(0,Number(body?.sceneIndex||0));
   const sceneCount=Math.max(1,Math.min(8,Number(body?.sceneCount||1)));
   const targetWords=Math.max(1,Math.floor(Number(body?.targetWords)||Math.round((chapterWordTarget.min+chapterWordTarget.max)/2)));
-  const currentWordCount=String(chapter.content||"").trim()?String(chapter.content||"").trim().split(/\\s+/).length:0;
+  const currentWordCount=String(chapter.content||"").trim()?String(chapter.content||"").trim().split(/\s+/).length:0;
   const remainingWords=Math.max(0,targetWords-currentWordCount);
   const scenesLeft=Math.max(1,sceneCount-sceneIndex);
   const sceneEstimate=Math.max(350,Math.min(450,Math.ceil(Math.max(400,remainingWords)/scenesLeft)));
