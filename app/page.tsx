@@ -451,16 +451,16 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
       }
 
       const rawSceneText=await runSingleAI(action,job.accumulatedText,job.nextScene,job.sceneCount);
-      const completeMarker=/\\[\\[CHAPTER_COMPLETE\\]\\]/i.test(rawSceneText);
-      const continueMarker=/\\[\\[CHAPTER_CONTINUE\\]\\]/i.test(rawSceneText);
-      const sceneText=rawSceneText.replace(/\\s*\\[\\[(?:CHAPTER_COMPLETE|CHAPTER_CONTINUE)\\]\\]\\s*/gi,"").trim();
+      const completeMarker=/\[\[CHAPTER_COMPLETE\]\]/i.test(rawSceneText);
+      const continueMarker=/\[\[CHAPTER_CONTINUE\]\]/i.test(rawSceneText);
+      const sceneText=rawSceneText.replace(/\s*\[\[(?:CHAPTER_COMPLETE|CHAPTER_CONTINUE)\]\]\s*/gi,"").trim();
       if(!sceneText)throw new Error("AI tidak menghasilkan isi scene yang dapat disimpan.");
       const previousSceneText=job.accumulatedText.trim();
       const nextAccumulatedText=previousSceneText
        ? previousSceneText+"\n\n"+sceneText
        : sceneText;
       const nextScene=job.nextScene+1;
-      const updatedWordCount=nextAccumulatedText.trim().split(/\\s+/).length;
+      const updatedWordCount=nextAccumulatedText.trim().split(/\s+/).length;
       const reachedTarget=updatedWordCount>=Math.floor(job.targetWords||targetWords);
       const shouldFinish=completeMarker||(reachedTarget&&!continueMarker);
       const nextSceneCount=shouldFinish?nextScene:Math.min(8,Math.max(job.sceneCount,nextScene+1));
@@ -482,6 +482,9 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
       );
       persistChapter(checkpointChapters);
       setNotice(`Scene ${job.nextScene}/${job.sceneCount} selesai • checkpoint tersimpan`);
+       if(job.nextScene>=8&&job.accumulatedText.trim().split(/\s+/).length<Math.floor(job.targetWords||targetWords)&&!completeMarker){
+        throw new Error("Batas 8 scene tercapai sebelum target kata atau penutupan bab terkonfirmasi. Checkpoint tersimpan; kamu bisa melanjutkan nanti.");
+       }
     }
 
     job={...job,status:"completed",updatedAt:new Date().toISOString()};
