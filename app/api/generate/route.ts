@@ -46,7 +46,7 @@ export async function POST(request:Request){
   const sceneEstimate=Math.max(350,Math.min(450,Math.ceil(Math.max(400,remainingWords)/scenesLeft)));
   const sceneMin=Math.max(300,Math.floor(sceneEstimate*0.85));
   const sceneMax=Math.max(sceneMin+50,Math.ceil(sceneEstimate*1.15));
-  const isSceneGeneration=(action==="generate"||action==="continue")&&sceneCount>1;
+  const isSceneGeneration=(action==="generate"||action==="continue")&&body?.sceneCount!==undefined;
   const clip=(value:unknown,max:number)=>String(value??"").trim().slice(0,max);
 
   const instructions:Record<Action,string>={
@@ -95,7 +95,7 @@ export async function POST(request:Request){
 
   const sceneInstruction=isSceneGeneration
    ? (!currentText.trim()
-      ? "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Naskah bab masih kosong, jadi mulai dari awal bab secara natural. Target scene: "+sceneMin+"–"+sceneMax+" kata. Jangan mencoba menyelesaikan seluruh bab di scene awal; bangun adegan yang dapat berkembang di scene berikutnya."
+      ? "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Naskah bab masih kosong, jadi mulai dari awal bab secara natural. Target scene: "+sceneMin+"–"+sceneMax+" kata. Jangan mencoba menyelesaikan seluruh bab di scene awal; bangun adegan yang dapat berkembang di scene berikutnya. Jika bab sudah benar-benar selesai, akhiri output dengan marker [[CHAPTER_COMPLETE]] pada baris tersendiri. Jika cerita masih perlu dilanjutkan, akhiri output dengan marker [[CHAPTER_CONTINUE]]. Marker bukan bagian dari naskah dan wajib tepat satu."
       : "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Naskah yang diberikan adalah teks yang sudah ada dan WAJIB dipertahankan utuh. Lanjutkan TEPAT dari kalimat terakhir; jangan menulis ulang, mengedit, meringkas, atau mengulang teks yang sudah ada. Target scene: "+sceneMin+"–"+sceneMax+" kata. Jika bab sudah benar-benar selesai, akhiri output dengan marker [[CHAPTER_COMPLETE]] pada baris tersendiri. Jika cerita masih perlu dilanjutkan, akhiri output dengan marker [[CHAPTER_CONTINUE]]. Marker bukan bagian dari naskah dan wajib tepat satu. "+(sceneIndex+1>=sceneCount?"Utamakan akhir bab yang wajar; jika belum selesai, tandai CHAPTER_CONTINUE agar sistem menambah scene.":"Majukan kejadian secara natural dan sisakan ruang bagi scene berikutnya."))
    : "";
 
