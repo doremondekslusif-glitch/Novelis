@@ -414,7 +414,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    if(action==="generate"||action==="continue"){
     const target=getChapterWordTarget(String(novel.genre||""),String(novel.builder?.length||"sedang"));
     const targetWords=wordGoal>0?wordGoal:Math.round((target.min+target.max)/2);
-    const existingWords=snapshot.text.trim()?snapshot.text.trim().split(/\\s+/).length:0;
+    const existingWords=snapshot.text.trim()?snapshot.text.trim().split(/\s+/).length:0;
     const totalScenes=sceneCountForChapter(target.min,target.max,existingWords,targetWords);
     const loadedJob=loadGenerationJob(novel.id,activeId);
     const reusableJob:GenerationJob|null=loadedJob&&
