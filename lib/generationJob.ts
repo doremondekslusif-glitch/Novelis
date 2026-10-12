@@ -10,6 +10,7 @@ export interface GenerationJob{
  accumulatedText:string;
  nextScene:number;
  sceneCount:number;
+ targetWords?:number;
  createdAt:string;
  updatedAt:string;
  status:"running"|"paused"|"completed"|"failed";
@@ -20,10 +21,10 @@ const STORAGE_PREFIX="novelis:generation-job:";
 
 function key(novelId:string,chapterId:string){return STORAGE_PREFIX+novelId+":"+chapterId;}
 
-export function sceneCountForChapter(targetMin:number,targetMax:number){
- if(targetMax>=1500)return 4;
- if(targetMax>=900)return 3;
- return 2;
+export function sceneCountForChapter(targetMin:number,targetMax:number,existingWords=0,targetWords?:number){
+ const goal=Math.max(1,Math.floor(targetWords||Math.round((targetMin+targetMax)/2)));
+ const remaining=Math.max(400,goal-Math.max(0,existingWords));
+ return Math.max(1,Math.min(8,Math.ceil(remaining/400)));
 }
 
 export function loadGenerationJob(novelId:string,chapterId:string){
@@ -53,6 +54,7 @@ export function createGenerationJob(args:{
  title:string;
  baseText:string;
  sceneCount:number;
+ targetWords?:number;
 }):GenerationJob{
  const now=new Date().toISOString();
  return {
@@ -65,6 +67,7 @@ export function createGenerationJob(args:{
   accumulatedText:args.baseText,
   nextScene:0,
   sceneCount:args.sceneCount,
+  targetWords:args.targetWords,
   createdAt:now,
   updatedAt:now,
   status:"running"
