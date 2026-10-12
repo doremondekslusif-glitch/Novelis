@@ -39,7 +39,8 @@ export async function POST(request:Request){
   const sceneIndex=Math.max(0,Number(body?.sceneIndex||0));
   const sceneCount=Math.max(1,Math.min(8,Number(body?.sceneCount||1)));
   const targetWords=Math.max(1,Math.floor(Number(body?.targetWords)||Math.round((chapterWordTarget.min+chapterWordTarget.max)/2)));
-  const currentWordCount=String(chapter.content||"").trim()?String(chapter.content||"").trim().split(/\s+/).length:0;
+  const rawChapterText=String(chapter.content||"").trim();
+  const currentWordCount=rawChapterText?rawChapterText.split(/\s+/).length:0;
   const remainingWords=Math.max(0,targetWords-currentWordCount);
   const scenesLeft=Math.max(1,sceneCount-sceneIndex);
   const sceneEstimate=Math.max(350,Math.min(450,Math.ceil(Math.max(400,remainingWords)/scenesLeft)));
@@ -95,7 +96,7 @@ export async function POST(request:Request){
   const sceneInstruction=isSceneGeneration
    ? (!currentText.trim()
       ? "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Naskah bab masih kosong, jadi mulai dari awal bab secara natural. Target scene: "+sceneMin+"–"+sceneMax+" kata. Jangan mencoba menyelesaikan seluruh bab di scene awal; bangun adegan yang dapat berkembang di scene berikutnya."
-      : "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Naskah yang diberikan adalah teks yang sudah ada dan WAJIB dipertahankan utuh. Lanjutkan TEPAT dari kalimat terakhir; jangan menulis ulang, mengedit, meringkas, atau mengulang teks yang sudah ada. Target scene: "+sceneMin+"–"+sceneMax+" kata. "+(sceneIndex+1>=sceneCount?"Jika konflik/adegan bab ini sudah mencapai titik yang wajar, tutup bab secara memuaskan; jangan membuka konflik baru hanya untuk menambah panjang.":"Majukan kejadian secara natural dan sisakan ruang bagi scene berikutnya."))
+      : "Tulis SCENE "+(sceneIndex+1)+" dari "+sceneCount+" untuk bab ini. Naskah yang diberikan adalah teks yang sudah ada dan WAJIB dipertahankan utuh. Lanjutkan TEPAT dari kalimat terakhir; jangan menulis ulang, mengedit, meringkas, atau mengulang teks yang sudah ada. Target scene: "+sceneMin+"–"+sceneMax+" kata. Jika bab sudah benar-benar selesai, akhiri output dengan marker [[CHAPTER_COMPLETE]] pada baris tersendiri. Jika cerita masih perlu dilanjutkan, akhiri output dengan marker [[CHAPTER_CONTINUE]]. Marker bukan bagian dari naskah dan wajib tepat satu. "+(sceneIndex+1>=sceneCount?"Utamakan akhir bab yang wajar; jika belum selesai, tandai CHAPTER_CONTINUE agar sistem menambah scene.":"Majukan kejadian secara natural dan sisakan ruang bagi scene berikutnya."))
    : "";
 
   const prompt=[
