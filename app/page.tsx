@@ -359,7 +359,7 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
    try{
     const until=Number(localStorage.getItem(cooldownKey)||0);
     if(until>Date.now()){
-     setGenerateError(`Gemini baru saja mengembalikan error 503. Untuk mencegah request berulang, tunggu ${Math.ceil((until-Date.now())/1000)} detik sebelum mencoba lagi.`);
+     setGenerateError(`Proteksi request AI masih aktif. Tunggu ${Math.ceil((until-Date.now())/1000)} detik sebelum mencoba lagi.`);
      return;
     }
     if(until)localStorage.removeItem(cooldownKey);
@@ -499,8 +499,14 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
     setNotice(action==="improve"?"Tulisan diperbaiki":action==="dialog"?"Dialog diperbarui":"Deskripsi diperkaya");
    }
   }catch(error){
-   if((action==="generate"||action==="continue")&&Number((error as any)?.status)===503){
-    try{localStorage.setItem(cooldownKey,String(Date.now()+60000))}catch{}
+   if(action==="generate"||action==="continue"){
+    const status=Number((error as any)?.status);
+    const code=String((error as any)?.code||"");
+    if(status===503||status===429){
+     // Cooldown lokal lintas percobaan untuk mencegah klik ulang setelah pembatasan provider.
+     const cooldownMs=code==="DAILY_QUOTA"?15*60*1000:60000;
+     try{localStorage.setItem(cooldownKey,String(Date.now()+cooldownMs))}catch{}
+    }
    }
    if(action==="generate"||action==="continue"){
     const checkpoint=loadGenerationJob(novel.id,activeId);
