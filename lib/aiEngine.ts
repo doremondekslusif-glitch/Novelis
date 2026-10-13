@@ -52,6 +52,19 @@ const DEFAULT_MODEL=process.env.GEMINI_MODEL||"gemini-3.8-flash";
 const DEFAULT_TIMEOUT=50000;
 const DEFAULT_RETRIES=1;
 
+/**
+ * Cooldown proteksi kuota per runtime/serverless instance.
+ * Bukan pengganti rate limiter terdistribusi; mencegah request beruntun
+ * terus menghabiskan kuota pada instance yang sama setelah Gemini memberi 429.
+ */
+let quotaCooldownUntil=0;
+let quotaCooldownCode="RATE_LIMIT";
+
+function quotaCooldownMs(code:string){
+ if(code==="DAILY_QUOTA")return 15*60*1000;
+ return 60*1000;
+}
+
 function requestId(){
  return "req_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,9);
 }
@@ -146,6 +159,14 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
   throw Object.assign(new Error("GEMINI_API_KEY belum dipasang di environment Vercel."),{code:"API_KEY_MISSING",status:500});
  }
 
+ if(Date.now()<quotaCooldownUntil){
+  const seconds=Math.ceil((quotaCooldownUntil-Date.now())/1000);
+  throw Object.assign(new Error(quotaCooldownCode==="DAILY_QUOTA"
+   ? "Gemini baru saja melaporkan daily quota habis. Proteksi lokal menahan request AI baru selama sekitar "+Math.ceil(seconds/60)+" menit; ini bukan informasi waktu reset kuota Google."
+   : "Gemini baru saja membatasi request (429). Proteksi lokal menahan request AI baru selama "+seconds+" detik untuk mencegah request berulang."),
+   {code:quotaCooldownCode,limitType:quotaCooldownCode==="DAILY_QUOTA"?"daily_quota":"rate_limit",status:429,geminiStatus:429});
+ }
+
  let lastError:GeminiErrorInfo={code:"GEMINI_ERROR",limitType:null,message:"Gemini gagal memproses permintaan."};
  let lastStatus=0;
 
@@ -206,6 +227,11 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
 
    lastStatus=response.status;
    lastError=classifyError(response.status,body?.error?.message||"",body?.error);
+
+   if(response.status===429){
+    quotaCooldownCode=lastError.code;
+    quotaCooldownUntil=Date.now()+quotaCooldownMs(lastError.code);
+   }
 
    // 429/quota tidak di-retry otomatis. 408/503 saja yang boleh retry.
    if((response.status===408||response.status===503)&&attempt<maxRetries){
