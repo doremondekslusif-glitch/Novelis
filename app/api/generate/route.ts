@@ -67,10 +67,13 @@ export async function POST(request:Request){
       ? currentText.slice(0,1000)+"\n...[bagian tengah dipadatkan untuk menjaga latensi]...\n"+currentText.slice(-5000)
       : currentText)
    : currentText;
-  const previousFullText=String(previousChapter?.content||"").trim();
-  // Untuk kontinuitas, bagian akhir bab tetap diprioritaskan.
+  // Konteks akhir bab sebelumnya hanya menjadi titik mulai saat membuat bab baru yang masih kosong.
+  // Jika bab aktif sudah memiliki naskah, titik mulai wajib adalah akhir naskah bab aktif,
+  // bukan akhir bab sebelumnya.
+  const continuingIntoEmptyChapter=action==="continue"&&!rawChapterText;
+  const previousFullText=continuingIntoEmptyChapter?String(previousChapter?.content||"").trim():"";
   const previousEnding=previousFullText.length>8000?previousFullText.slice(-8000):previousFullText;
-  const previousSummary=clip(previousChapter?.summary,1500);
+  const previousSummary=continuingIntoEmptyChapter?clip(previousChapter?.summary,1500):"";
 
   // Context Engine memilih memory yang relevan berdasarkan tugas dan bab aktif.
   // Ia tidak menyimpan memory; ia hanya menyusun ContextResult yang dibutuhkan AI.
