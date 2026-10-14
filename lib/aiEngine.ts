@@ -4,6 +4,7 @@ export type AIAction =
   | "improve"
   | "dialog"
   | "description"
+  | "selectionRepair"
   | "summarize"
   | "memory"
   | "memoryFoundation"
