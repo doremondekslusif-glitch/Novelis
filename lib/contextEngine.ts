@@ -6,6 +6,7 @@ export type ContextAction =
   | "improve"
   | "dialog"
   | "description"
+  | "selectionRepair"
   | "summarize"
   | "memory"
   | "memoryFoundation"
