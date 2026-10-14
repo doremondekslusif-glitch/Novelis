@@ -266,6 +266,10 @@ function Editor({novel,onBack,onUpdate}:{novel:Novel;onBack:()=>void;onUpdate:(n
  const [title,setTitle]=useState("");const [text,setText]=useState("");
  const [dirty,setDirty]=useState(false);const [generating,setGenerating]=useState(false);const [generateError,setGenerateError]=useState("");
  const [notice,setNotice]=useState("");
+ const editorTextareaRef=useRef<HTMLTextAreaElement|null>(null);
+ const [selectionDraft,setSelectionDraft]=useState<{start:number;end:number;original:string;fullText:string;chapterId:string;chapterTitle:string;mode:string;phase:"configure"|"working"|"preview";revised?:string;warning?:string}|null>(null);
+ const [selectionError,setSelectionError]=useState("");
+ const [selectionAcknowledged,setSelectionAcknowledged]=useState(false);
  const [memory,setMemory]=useState(novel.memory||"");
  const [characterMemories,setCharacterMemories]=useState<CharacterMemory[]>(novel.charactersMemory||[]);
  const [entityMemories,setEntityMemories]=useState<EntityMemory[]>(novel.entitiesMemory||[]);
