@@ -221,11 +221,17 @@ function ProjectDownloadModal({novel,onClose}:{novel:Novel;onClose:()=>void}){co
 }
 
 function splitSelectionText(value:string,maxChars=4200){
- const parts=String(value||"").split(/(\n{2,})/);const out:string[]=[];let current="";
- const flush=()=>{if(current){out.push(current);current="";}};
- for(const part of parts){if(!part)continue;if(part.length>maxChars){flush();let rest=part;while(rest.length){let cut=rest.lastIndexOf(" ",maxChars);if(cut<maxChars*0.55)cut=maxChars;out.push(rest.slice(0,cut));rest=rest.slice(cut);}}else if(current.length+part.length>maxChars){flush();current=part;}else current+=part;}
- flush();return out.length?out:[String(value||"")];
+ const source=String(value||"");const chunks:string[]=[];let rest=source;
+ while(rest.length>maxChars){
+  let cut=rest.lastIndexOf("\n\n",maxChars);
+  if(cut>=maxChars*.55)cut+=2;
+  else{cut=rest.lastIndexOf(" ",maxChars);if(cut<maxChars*.55)cut=maxChars;else cut+=1;}
+  chunks.push(rest.slice(0,cut));rest=rest.slice(cut);
+ }
+ if(rest)chunks.push(rest);
+ return chunks.length?chunks:[source];
 }
+
 function Builder({novel,onBack,onUpdate,onStart}:{novel:Novel;onBack:()=>void;onUpdate:(n:Novel)=>void;onStart:()=>void}){
  const [step,setStep]=useState(1);const [data,setData]=useState<BuilderData>({...emptyBuilder,...novel.builder});const [saved,setSaved]=useState(true);
  const labels=["Konsep & Arah","Karakter Utama","Dunia Cerita","Outline Bab"];
