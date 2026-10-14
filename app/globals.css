@@ -76,3 +76,25 @@
  .directoryRow{align-items:flex-start;flex-direction:column}
  .exportGrid{grid-template-columns:1fr}
 }
+
+
+/* Selected text repair preview */
+.selectionRepairModal{width:min(980px,100%);max-height:88vh;overflow:auto}
+.selectionOriginal{margin-top:14px;padding:12px;border:1px solid var(--line);background:#fcfbfa;border-radius:10px}
+.selectionOriginal b{font-size:11px;color:#71675e}
+.selectionOriginal p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:190px;overflow:auto;margin:8px 0 0;color:#655d56;font:13px/1.65 Georgia,serif}
+.selectionWorking{display:flex;flex-direction:column;align-items:center;gap:12px;padding:42px 12px;color:#756b80;text-align:center}
+.selectionWorking b{color:var(--ink);font-size:14px}
+.selectionWorking span{font-size:12px;color:var(--muted)}
+.selectionCompare{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.selectionCompare>div{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.selectionCompare>div>b{display:block;padding:10px 12px;background:#f7f4f0;color:#80766d;font-size:10px;letter-spacing:.08em}
+.selectionCompare p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:42vh;overflow:auto;margin:0;padding:13px;color:#433d38;font:14px/1.7 Georgia,serif}
+.selectionCompare>div+div{border-color:#d9c9f6}
+.selectionCompare>div+div>b{background:#f4effd;color:#7048c5}
+.selectionWarning{margin:12px 0;padding:12px;border:1px solid #f0d6a9;border-radius:10px;background:#fff9ec;color:#8b6426;font-size:12px;line-height:1.5}
+.selectionAck{display:flex!important;align-items:center;gap:8px;margin:10px 0 0!important;color:#705b36;font-weight:500!important}
+.selectionAck input{width:auto!important;margin:0!important}
+.selectionActions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.selectionActions .primary{box-shadow:none}
+@media(max-width:650px){.selectionCompare{grid-template-columns:1fr}.selectionCompare p{max-height:28vh}.selectionActions>*{flex:1;justify-content:center}.selectionRepairModal{padding:18px;max-height:90vh}}

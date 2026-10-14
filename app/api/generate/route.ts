@@ -12,7 +12,7 @@ export async function GET(){
  return NextResponse.json({ok:true,hasGeminiKey:Boolean(apiKey),model:aiModel()});
 }
 
-type Action="generate"|"continue"|"improve"|"dialog"|"description"|"summarize"|"memory"|"memoryFoundation"|"storyIntelligence"|"qualityControl";
+type Action="generate"|"continue"|"improve"|"dialog"|"description"|"selectionRepair"|"summarize"|"memory"|"memoryFoundation"|"storyIntelligence"|"qualityControl";
 
 export async function POST(request:Request){
  try{
@@ -49,9 +49,19 @@ export async function POST(request:Request){
   const isSceneGeneration=(action==="generate"||action==="continue")&&body?.sceneCount!==undefined;
   const clip=(value:unknown,max:number)=>String(value??"").trim().slice(0,max);
 
+  const selectionMode=String(body?.selectionMode||"language");
+  const selectionContextBefore=clip(body?.selectionContextBefore,1800);
+  const selectionContextAfter=clip(body?.selectionContextAfter,1800);
+  const selectionInstructions:Record<string,string>={
+   language:"Perbaiki bahasa, tata bahasa, pilihan kata, dan kelancaran kalimat. Pertahankan makna, fakta, sudut pandang, urutan kejadian, dan panjang yang wajar. Jangan meringkas.",
+   dialog:"Perbaiki dialog agar terdengar natural dan sesuai karakter. Pertahankan maksud, identitas pembicara, informasi penting, dan kejadian. Jangan meringkas atau menambahkan kejadian baru.",
+   continuity:"Perbaiki alur dan konsistensi bagian terpilih berdasarkan konteks yang tersedia. Pertahankan fakta cerita, kronologi, karakter, dan maksud. Jangan memperbaiki teks di luar bagian terpilih dan jangan mengarang fakta baru."
+  };
+
   const instructions:Record<Action,string>={
    generate:"Mulai Bab 1 dari awal. Tulis bab yang natural, imersif, dan kaya adegan. Target panjang bab untuk genre dan skala novel ini adalah "+chapterTargetText+". Jadikan rentang ini sebagai target utama, tetapi biarkan adegan berhenti secara natural jika struktur cerita sudah selesai.",
    continue:"Lanjutkan cerita tepat setelah AKHIR bab sebelumnya. Jangan mengulang adegan, dialog, tindakan, informasi, atau kejadian yang sudah terjadi. Bagian akhir bab sebelumnya adalah TITIK MULAI cerita ini. Jika bab sebelumnya berakhir saat tokoh sedang berada di suatu tempat, melakukan sesuatu, atau baru mengetahui sesuatu, mulai dari keadaan terakhir tersebut dan bergerak maju. Jangan kembali ke awal bab sebelumnya hanya untuk menjelaskan ulang. Gunakan ringkasan untuk memahami keseluruhan bab dan KONTEKS AKHIR untuk menentukan posisi cerita yang sebenarnya. Target panjang bab untuk genre dan skala novel ini adalah "+chapterTargetText+". Jadikan rentang ini sebagai target utama, tetapi biarkan cerita bergerak natural dan jangan memaksakan kata hanya demi angka.",
+   selectionRepair:"Kamu sedang memperbaiki BAGIAN TEKS TERPILIH, bukan seluruh bab. "+(selectionInstructions[selectionMode]||selectionInstructions.language)+" Kembalikan hanya versi revisi bagian yang diberikan, tanpa komentar, label, atau markdown.",
    improve:"Perbaiki teks bab yang diberikan. Pertahankan inti cerita, fakta, karakter, urutan kejadian, dan gaya penulisannya. Perbaiki kalimat, alur, transisi, dialog, dan konsistensi tanpa mengubah maksud cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    dialog:"Perkaya bagian yang diberikan dengan dialog yang natural dan sesuai karakter. Pertahankan kejadian utama dan jangan mengubah inti cerita. Kembalikan versi lengkap teks yang sudah diperbaiki.",
    description:"Perkaya bagian yang diberikan dengan deskripsi suasana, tempat, ekspresi, gerakan, dan detail inderawi yang relevan. Jangan mengubah inti cerita atau kejadian utama. Kembalikan versi lengkap teks yang sudah diperbaiki.",
@@ -129,6 +139,8 @@ export async function POST(request:Request){
    "Dunia cerita: "+(builder.world||"-"),
    "Outline keseluruhan: "+(builder.outline||"-"),
    retrievedContext ? "KONTEKS TERPILIH OLEH CONTEXT ENGINE:\n"+retrievedContext : "",
+   action==="selectionRepair"&&selectionContextBefore ? "KONTEKS SEBELUM BAGIAN TERPILIH (hanya untuk memahami cerita, jangan dikembalikan):\n"+selectionContextBefore : "",
+   action==="selectionRepair"&&selectionContextAfter ? "KONTEKS SESUDAH BAGIAN TERPILIH (hanya untuk memahami cerita, jangan dikembalikan):\n"+selectionContextAfter : "",
    "",
    "BAB: "+(chapter.number||1),
    "JUDUL BAB: "+(chapter.title||"Bab tanpa judul"),
