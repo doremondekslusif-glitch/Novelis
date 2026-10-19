@@ -25,6 +25,19 @@ export async function POST(request:Request){
   const action:Action=body?.action||"generate";
   const novel=body?.novel||{};
   const chapter=body?.chapter||{};
+  if(action==="selectionRepair"){
+   const selectedText=String(chapter.content||"");
+   const mode=String(body?.selectionMode||"language");
+   if(!selectedText.trim()){
+    return NextResponse.json({error:"Teks yang dipilih kosong. Pilih bagian naskah lalu coba lagi.",code:"EMPTY_SELECTION"},{status:400});
+   }
+   if(selectedText.length>5000){
+    return NextResponse.json({error:"Bagian pilihan terlalu panjang untuk satu tahap. Sistem perlu memecah seleksi menjadi beberapa bagian.",code:"SELECTION_TOO_LONG"},{status:413});
+   }
+   if(!["language","dialog","continuity"].includes(mode)){
+    return NextResponse.json({error:"Jenis perbaikan tidak dikenal.",code:"INVALID_SELECTION_MODE"},{status:400});
+   }
+  }
   const previousChapter=body?.previousChapter||null;
   const builder=novel.builder||{};
   const locked=Array.isArray(builder.locked)?builder.locked:[];
