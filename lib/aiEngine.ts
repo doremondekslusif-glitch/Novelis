@@ -234,12 +234,14 @@ export async function executeAI(request:AIRequest):Promise<AIResult>{
     quotaCooldownUntil=Date.now()+quotaCooldownMs(lastError.code);
    }
 
-   // 429/quota tidak di-retry otomatis. 408/503 saja yang boleh retry.
-   if((response.status===408||response.status===503)&&attempt<maxRetries){
+   // Jangan retry 429 agar tidak memperburuk kuota. Retry transient 5xx dan 408.
+   const retryableStatus=[408,500,502,503,504].includes(response.status);
+   if(retryableStatus&&attempt<maxRetries){
     const retryAfter=Number(response.headers.get("retry-after")||0);
-    const backoff=2000*Math.pow(2,attempt);
-    const jitter=Math.floor(Math.random()*350);
-    const delay=retryAfter>0?Math.min(retryAfter*1000,10000):Math.min(backoff+jitter,8000);
+    const backoff=700*Math.pow(2,attempt);
+    const jitter=Math.floor(Math.random()*300);
+    const delay=retryAfter>0?Math.min(retryAfter*1000,5000):Math.min(backoff+jitter,3000);
+    console.warn("[Novelis AI] transient Gemini response; retrying",{requestId:id,action:request.action,model,status:response.status,attempt:attempt+1,maxRetries});
     await new Promise(resolve=>setTimeout(resolve,delay));
     continue;
    }
